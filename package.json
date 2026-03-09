@@ -1,0 +1,52 @@
+{
+  "name": "roboreviewer",
+  "version": "0.1.0",
+  "description": "Repository-scoped CLI for structured multi-agent code review and implementation.",
+  "license": "MIT",
+  "author": "Kirin Murphy",
+  "homepage": "https://github.com/kirinmurphy/roboreviewer",
+  "repository": {
+    "type": "git",
+    "url": "git+ssh://git@github.com/kirinmurphy/roboreviewer.git"
+  },
+  "bugs": {
+    "url": "https://github.com/kirinmurphy/roboreviewer/issues"
+  },
+  "keywords": [
+    "cli",
+    "code-review",
+    "agents",
+    "codex",
+    "claude",
+    "developer-tools"
+  ],
+  "type": "module",
+  "files": [
+    "bin/",
+    "scripts/",
+    "src/",
+    "README.md",
+    "LICENSE",
+    "tsconfig.json"
+  ],
+  "bin": {
+    "roboreviewer": "./bin/roboreviewer.ts"
+  },
+  "scripts": {
+    "lint": "node --experimental-strip-types ./scripts/lint.ts",
+    "typecheck": "tsc --noEmit",
+    "ci": "npm run lint && npm run typecheck && npm test",
+    "test": "node --experimental-strip-types --test",
+    "test:live:codex": "ROBOREVIEWER_TEST_CODEX=1 node --experimental-strip-types --test test/live-adapters.test.ts",
+    "test:live:claude": "ROBOREVIEWER_TEST_CLAUDE=1 node --experimental-strip-types --test test/live-adapters.test.ts",
+    "test:live:all": "ROBOREVIEWER_TEST_CODEX=1 ROBOREVIEWER_TEST_CLAUDE=1 node --experimental-strip-types --test test/live-adapters.test.ts",
+    "start": "node --experimental-strip-types ./bin/roboreviewer.ts"
+  },
+  "devDependencies": {
+    "@types/node": "^22.15.21",
+    "typescript": "^5.9.2"
+  },
+  "engines": {
+    "node": ">=22"
+  }
+}

@@ -1,0 +1,36 @@
+{
+  "permissions": {
+    "read": {
+      "type": "default",
+      "default": "allow"
+    },
+    "write": {
+      "type": "default",
+      "default": "allow"
+    },
+    "edit": {
+      "type": "default",
+      "default": "allow"
+    },
+    "bash": {
+      "type": "default",
+      "default": "allow"
+    },
+    "readOutsideDirectory": {
+      "type": "default",
+      "default": "ask"
+    },
+    "delete": {
+      "type": "default",
+      "default": "ask"
+    },
+    "gitCommit": {
+      "type": "default",
+      "default": "ask"
+    },
+    "gitPush": {
+      "type": "default",
+      "default": "ask"
+    }
+  }
+}
