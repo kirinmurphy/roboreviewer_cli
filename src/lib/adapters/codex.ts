@@ -4,7 +4,13 @@ import { AGENT_TOOLS, AUDIT_ASSESSMENT_DISPOSITIONS, EXECUTION_STATUSES, REQUEST
 import { ensureDir } from "../system/fs.ts";
 import { INTERNAL_CONFIG } from "../internal-config.ts";
 import { runCommand } from "../system/shell.ts";
-import { buildCommonPromptSections, createImplementationResponse, createPushbackResponse, createReviewResponse } from "./shared.ts";
+import {
+  buildCommonPromptSections,
+  buildReviewFocusSection,
+  createImplementationResponse,
+  createPushbackResponse,
+  createReviewResponse,
+} from "./shared.ts";
 
 export function createCodexAdapter() {
   return {
@@ -140,7 +146,7 @@ function buildPrompt(request) {
       "You are Roboreviewer running a strict structured review.",
       "Review only the provided diff and optional context.",
       "Return findings only for concrete issues worth fixing in this review window.",
-      "Do not propose speculative or style-only changes unless they materially affect maintainability.",
+      buildReviewFocusSection(),
       "For every provided audit finding, return an audit_assessments entry with disposition adopt or reject and a concise reason.",
       "If you adopt an audit finding, also emit a normal finding that references its audit_finding_id in related_audit_ids.",
       "Use repository-relative file paths.",

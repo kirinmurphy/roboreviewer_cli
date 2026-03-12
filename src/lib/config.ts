@@ -1,10 +1,19 @@
 import path from "node:path";
-import { AUDIT_TOOLS, CONFIG_PATH, DEFAULT_MAX_DOCS_BYTES, SCHEMA_VERSION, SUPPORTED_AGENT_TOOLS, SUPPORTED_AUDIT_TOOLS } from "./constants.ts";
+import {
+  AUDIT_TOOLS,
+  CONFIG_PATH,
+  DEFAULT_AUTO_UPDATE,
+  DEFAULT_MAX_DOCS_BYTES,
+  SCHEMA_VERSION,
+  SUPPORTED_AGENT_TOOLS,
+  SUPPORTED_AUDIT_TOOLS,
+} from "./constants.ts";
 import { pathExists, readJson, writeJsonAtomic } from "./system/fs.ts";
 
 export function createDefaultConfig({ docsPath, directorTool, reviewerTool, coderabbitEnabled }) {
   return {
     schema_version: SCHEMA_VERSION,
+    autoUpdate: DEFAULT_AUTO_UPDATE,
     agents: {
       director: {
         tool: directorTool,
@@ -56,6 +65,10 @@ export function validateConfig({ config, cwd }) {
     if (!SUPPORTED_AGENT_TOOLS.includes(reviewer.tool)) {
       throw new Error(`Unsupported reviewer tool: ${reviewer.tool}`);
     }
+  }
+
+  if (typeof config.autoUpdate !== "boolean") {
+    throw new Error("autoUpdate must be a boolean.");
   }
 
   if (typeof config?.context?.max_docs_bytes !== "number" || config.context.max_docs_bytes <= 0) {

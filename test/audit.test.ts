@@ -10,6 +10,7 @@ test("parseAuditFindings keeps CodeRabbit comment blocks and drops patch/proposa
     "File: src/example.ts",
     "Line: 10 to 14",
     "Type: potential_issue",
+    "Severity: major",
     "",
     "Comment:",
     "Missing error handling contradicts the non-throwing contract.",
@@ -45,6 +46,7 @@ test("parseAuditFindings keeps CodeRabbit comment blocks and drops patch/proposa
   });
 
   assert.equal(findings.length, 2);
+  assert.equal(findings[0].severity, "major");
   assert.equal(findings[0].summary, "Missing error handling contradicts the non-throwing contract.");
   assert.match(findings[0].raw_text, /awaited DB call can still reject/);
   assert.doesNotMatch(findings[0].raw_text, /Prompt for AI Agent|Proposed fix|await dbCall/);
@@ -60,5 +62,17 @@ test("buildCodeRabbitReviewArgs scopes CodeRabbit to the same committed range", 
       },
     }),
     ["review", "--plain", "--type", "committed", "--base-commit", "abc123^"],
+  );
+});
+
+test("buildCodeRabbitReviewArgs skips committed range flags for root-commit diffs", () => {
+  assert.deepEqual(
+    buildCodeRabbitReviewArgs({
+      reviewTarget: {
+        mode: "commit_range",
+        diffBase: "4b825dc642cb6eb9a060e54bf8d69288fbee4904",
+      },
+    }),
+    ["review", "--plain"],
   );
 });

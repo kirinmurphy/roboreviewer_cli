@@ -3,6 +3,7 @@ import {
   AUDIT_TOOLS,
   EXECUTION_STATUSES,
 } from "../constants.ts";
+import { EMPTY_TREE_SHA } from "../system/git.ts";
 import { runCommand } from "../system/shell.ts";
 
 export async function runAuditTools(
@@ -91,7 +92,11 @@ export async function runAuditTools(
 
 export function buildCodeRabbitReviewArgs({ reviewTarget }: { reviewTarget?: { mode: string; diffBase?: string } }) {
   const args = ["review", "--plain"];
-  if (reviewTarget?.mode === "commit_range" && reviewTarget.diffBase) {
+  if (
+    reviewTarget?.mode === "commit_range" &&
+    reviewTarget.diffBase &&
+    reviewTarget.diffBase !== EMPTY_TREE_SHA
+  ) {
     args.push("--type", "committed", "--base-commit", reviewTarget.diffBase);
   }
   return args;
@@ -127,6 +132,7 @@ function parseStructuredAuditSections({ toolId, advisory }: { toolId: string; ad
     .map((section) => {
       const fileMatch = section.match(/^File:\s+(.+)$/m);
       const commentMatch = section.match(/(?:^|\n)Comment:\s*\n([\s\S]+)$/m);
+      const severity = extractAuditSeverity({ section });
       if (!fileMatch || !commentMatch) {
         return null;
       }
@@ -139,6 +145,7 @@ function parseStructuredAuditSections({ toolId, advisory }: { toolId: string; ad
       return {
         tool_id: toolId,
         file: fileMatch[1].trim(),
+        severity,
         summary: summarizeAuditComment({ text: commentBody }),
         raw_text: commentBody,
       };
@@ -151,6 +158,7 @@ function parseStructuredAuditSections({ toolId, advisory }: { toolId: string; ad
     file: finding.file,
     summary: finding.summary,
     raw_text: finding.raw_text,
+    severity: finding.severity ?? null,
     status: AUDIT_FINDING_STATUSES.NOT_ADOPTED,
     adopted_by: [],
   }));
@@ -206,6 +214,7 @@ function parseBulletAuditFindings({ toolId, advisory }: { toolId: string; adviso
     file: "",
     summary: line,
     raw_text: line,
+    severity: null,
     status: AUDIT_FINDING_STATUSES.NOT_ADOPTED,
     adopted_by: [],
   }));
@@ -241,4 +250,13 @@ function isUsefulAuditBullet({ line }: { line: string }) {
   }
 
   return true;
+}
+
+function extractAuditSeverity({ section }: { section: string }) {
+  const severityMatch = section.match(/^Severity:\s+(.+)$/m);
+  if (!severityMatch) {
+    return null;
+  }
+  const normalized = severityMatch[1].trim().toLowerCase();
+  return ["critical", "major", "minor", "trivial"].includes(normalized) ? normalized : null;
 }

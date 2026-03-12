@@ -1,7 +1,7 @@
-import { runInitCommand } from "./commands/init.ts";
+import { runInitCommand } from "./commands/init/index.ts";
 import { runResolveCommand } from "./commands/resolve.ts";
 import { runResumeCommand } from "./commands/resume.ts";
-import { runReviewCommand } from "./commands/review.ts";
+import { runReviewCommand } from "./commands/review/index.ts";
 import { CLI_COMMANDS } from "./lib/constants.ts";
 
 export async function runCli(argv) {

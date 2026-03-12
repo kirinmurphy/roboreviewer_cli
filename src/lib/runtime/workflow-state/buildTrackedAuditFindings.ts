@@ -1,35 +1,4 @@
-import {
-  AUDIT_FINDING_STATUSES,
-  CONFLICT_STATUSES,
-  FINDING_STATUSES,
-  IMPLEMENTATION_PHASES,
-} from "../constants.ts";
-import { conflictId } from "../ids.ts";
-
-export function getImplementationReadyFindings(findings: any[]) {
-  return findings.filter((finding) => finding.status === FINDING_STATUSES.IMPLEMENTATION_READY);
-}
-
-export function createConflicts(findings: any[]) {
-  return findings
-    .filter((finding) => finding.status === FINDING_STATUSES.NON_CONSENSUS)
-    .map((finding, index) => ({
-      conflict_id: conflictId(index + 1),
-      finding_id: finding.finding_id,
-      status: CONFLICT_STATUSES.UNRESOLVED,
-      human_decision: null,
-    }));
-}
-
-export function markImplementedFindings({ findings, implementationReady }: { findings: any[]; implementationReady: any[] }) {
-  const implementedIds = new Set(implementationReady.map((finding) => finding.finding_id));
-  return findings.map((finding) => {
-    if (implementedIds.has(finding.finding_id)) {
-      return { ...finding, status: FINDING_STATUSES.IMPLEMENTED };
-    }
-    return finding;
-  });
-}
+import { AUDIT_FINDING_STATUSES, DECIDED_BY, RESOLUTION_STATUSES, ROBOVIEW_OUTCOMES } from "../../constants.ts";
 
 export function buildTrackedAuditFindings({
   auditFindings,
@@ -65,6 +34,8 @@ export function buildTrackedAuditFindings({
       status: adoptedBy.length > 0 ? AUDIT_FINDING_STATUSES.ADOPTED : AUDIT_FINDING_STATUSES.NOT_ADOPTED,
       adopted_by: adoptedBy,
       reviewer_assessments: reviewerAssessments,
+      resolution_status: adoptedBy.length > 0 ? AUDIT_FINDING_STATUSES.ADOPTED : RESOLUTION_STATUSES.DISCARDED,
+      decided_by: DECIDED_BY.ROBOREVIEWER,
       not_adopted_reason:
         adoptedBy.length > 0 ? null : buildNotAdoptedReason({ auditFinding, linkedFindings, reviewerAssessments }),
     };
@@ -103,7 +74,7 @@ function buildNotAdoptedReason({
       : "Withdrawn after peer review.";
   }
 
-  const nonConsensus = linkedFindings.filter((finding) => finding.status === FINDING_STATUSES.NON_CONSENSUS);
+  const nonConsensus = linkedFindings.filter((finding) => finding.roboreview_outcome === ROBOVIEW_OUTCOMES.NON_CONSENSUS);
   if (nonConsensus.length > 0) {
     const note = nonConsensus
       .flatMap((finding) => finding.peer_reviews ?? [])
@@ -112,53 +83,14 @@ function buildNotAdoptedReason({
     return note ?? "Raised by a reviewer, but it did not reach consensus.";
   }
 
-  const resolved = linkedFindings.filter((finding) => finding.status === FINDING_STATUSES.RESOLVED);
-  if (resolved.length > 0) {
+  const discarded = linkedFindings.filter((finding) => finding.resolution_status === RESOLUTION_STATUSES.DISCARDED);
+  if (discarded.length > 0) {
     const assessmentNote = rejectedAssessments.map((assessment) => assessment.note).find(Boolean);
-    const note = resolved
+    const note = discarded
       .map((finding) => finding.pushback_resolution?.note)
       .find(Boolean);
-    return note ?? assessmentNote ?? "Raised by a reviewer, but it was resolved without being implemented.";
+    return note ?? assessmentNote ?? "Raised during review, but it was discarded.";
   }
 
   return "Raised during review, but it was not selected for implementation.";
 }
-
-export function resolveFindingsAfterHumanDecision({ findings, implementFindings }: { findings: any[]; implementFindings: any[] }) {
-  const implementedIds = new Set(implementFindings.map((finding) => finding.finding_id));
-  return findings.map((finding) => {
-    if (implementedIds.has(finding.finding_id)) {
-      return { ...finding, status: FINDING_STATUSES.IMPLEMENTED };
-    }
-    if (finding.status === FINDING_STATUSES.NON_CONSENSUS) {
-      return { ...finding, status: FINDING_STATUSES.RESOLVED };
-    }
-    return finding;
-  });
-}
-
-export function resolveConflicts(conflicts: any[]) {
-  return conflicts.map((conflict) => ({
-    ...conflict,
-    status: CONFLICT_STATUSES.RESOLVED,
-  }));
-}
-
-export function createImplementationRun({
-  phase,
-  implementation,
-}: {
-  phase: string;
-  implementation: { filesTouched: string[]; raw: string };
-}) {
-  return {
-    phase,
-    files_touched: implementation.filesTouched,
-    raw: implementation.raw,
-  };
-}
-
-export const WORKFLOW_PHASES = {
-  REVIEW: IMPLEMENTATION_PHASES.REVIEW,
-  RESOLVE: IMPLEMENTATION_PHASES.RESOLVE,
-} as const;

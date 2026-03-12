@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { buildTrackedAuditFindings } from "../src/lib/runtime/workflow-state.ts";
+import { buildTrackedAuditFindings } from "../src/lib/runtime/workflow-state/index.ts";
 
 test("buildTrackedAuditFindings uses reviewer rejection notes for non-adopted audit items", () => {
   const tracked = buildTrackedAuditFindings({

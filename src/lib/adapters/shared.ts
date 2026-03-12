@@ -1,5 +1,13 @@
 import { EXECUTION_STATUSES, REQUEST_TYPES } from "../constants.ts";
 
+export const REVIEW_FOCUS_AREAS = [
+  "Look for concrete correctness, security, maintainability, and performance issues in the provided review scope.",
+  "Call out duplicated or redundant logic when it creates clear DRY opportunities or increases maintenance risk.",
+  "Call out implementation gaps where a change is only partially applied across related code paths, states, or callers.",
+  "Call out optimization opportunities only when they materially improve correctness, maintainability, performance, or operational safety.",
+  "Do not propose speculative cleanups or style-only edits unless they materially affect maintainability.",
+] as const;
+
 export function buildCommonPromptSections(request: any) {
   const sections = [];
 
@@ -31,6 +39,10 @@ export function buildCommonPromptSections(request: any) {
   }
 
   return sections;
+}
+
+export function buildReviewFocusSection() {
+  return ["Review focus:", ...REVIEW_FOCUS_AREAS.map((item) => `- ${item}`)].join("\n");
 }
 
 export function createReviewResponse(result: any) {

@@ -8,6 +8,10 @@ These rules apply across this repository.
 - Place primary exported functions at the top of a file.
 - Keep small ancillary helpers below the primary export.
 - If helper logic grows large enough to compete with the main export, move it into its own file.
+- When a file accumulates multiple ancillary modules, create a sibling subdirectory named after the parent file and move the parent module to `index.ts` inside that directory.
+- In that layout, keep the `index.ts` file focused on orchestration and public exports, and place extracted ancillary logic in sibling files within the same directory.
+- If several related ancillary functions support one main extracted function, place them together in a file named after that main export.
+- If several smaller independent helpers are extracted together, place them in a `helper-functions.ts` file.
 
 ## Function Design
 

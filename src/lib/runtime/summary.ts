@@ -1,13 +1,12 @@
-import { AUDIT_FINDING_STATUSES, CONFLICT_STATUSES, FINDING_STATUSES } from "../constants.ts";
+import { AUDIT_FINDING_STATUSES, CONFLICT_STATUSES, RESOLUTION_STATUSES } from "../constants.ts";
 import { INTERNAL_CONFIG } from "../internal-config.ts";
 
 export function buildSummary(session) {
   const findingsById = new Map(session.findings.map((finding) => [finding.finding_id, finding]));
   const unresolved = session.conflicts.filter((conflict) => conflict.status !== CONFLICT_STATUSES.RESOLVED);
   const resolvedConflicts = session.conflicts.filter((conflict) => conflict.status === CONFLICT_STATUSES.RESOLVED);
-  const consensusFindings = session.findings.filter(
-    (finding) => finding.status === FINDING_STATUSES.IMPLEMENTATION_READY || finding.status === FINDING_STATUSES.IMPLEMENTED,
-  );
+  const consensusFindings = session.findings.filter((finding) => finding.resolution_status === RESOLUTION_STATUSES.IMPLEMENTED);
+  const discardedFindings = session.findings.filter((finding) => finding.resolution_status === RESOLUTION_STATUSES.DISCARDED);
   const unresolvedAuditFindings = (session.audit_findings ?? []).filter(
     (finding) => finding.status === AUDIT_FINDING_STATUSES.NOT_ADOPTED,
   );
@@ -40,6 +39,12 @@ export function buildSummary(session) {
     lines,
     title: INTERNAL_CONFIG.summary.consensusFixesTitle,
     items: consensusFindings,
+    renderItem: ({ item, index }) => formatConsensusItem({ finding: item, index }),
+  });
+  renderSection({
+    lines,
+    title: INTERNAL_CONFIG.summary.discardedFindingsTitle,
+    items: discardedFindings,
     renderItem: ({ item, index }) => formatConsensusItem({ finding: item, index }),
   });
   renderSection({
@@ -122,7 +127,8 @@ function formatConflict({ conflict, findingsById, index }) {
 function formatConsensusItem({ finding, index }) {
   const location = finding?.location ? `${finding.location.file}:${finding.location.line}` : "unknown";
   const attribution = Array.isArray(finding?.attribution) ? finding.attribution.join(", ") : finding?.source_reviewer_id;
-  return `${index}. **${location}** - ${finding.summary} (${attribution})`;
+  const disposition = [finding.roboreview_outcome, finding.decided_by, finding.resolution_status].filter(Boolean).join(", ");
+  return `${index}. **${location}** - ${finding.summary} (${attribution}${disposition ? `; ${disposition}` : ""})`;
 }
 
 function formatAuditItem({ auditFinding, index }) {

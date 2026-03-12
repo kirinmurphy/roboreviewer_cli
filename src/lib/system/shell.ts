@@ -6,6 +6,7 @@ type CommandOptions = {
   cwd?: string;
   env?: NodeJS.ProcessEnv;
   input?: string;
+  allowedExitCodes?: number[];
 };
 
 export type CommandResult = {
@@ -20,6 +21,7 @@ export function runCommand({
   cwd,
   env,
   input,
+  allowedExitCodes = [],
 }: CommandOptions): Promise<CommandResult> {
   return new Promise<CommandResult>((resolve, reject) => {
     let settled = false;
@@ -62,9 +64,9 @@ export function runCommand({
         return;
       }
 
-      if (code === 0) {
+      if (code === 0 || allowedExitCodes.includes(code ?? -1)) {
         settled = true;
-        resolve({ stdout, stderr, code: 0 });
+        resolve({ stdout, stderr, code: code ?? 0 });
         return;
       }
 

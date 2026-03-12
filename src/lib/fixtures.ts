@@ -22,7 +22,7 @@ export async function createFixtureRepo(prefix: string) {
   return tempDir;
 }
 
-export async function createMockWorkflowRepo() {
+export async function createMockWorkflowRepo({ autoUpdate = true }: { autoUpdate?: boolean } = {}) {
   const tempDir = await createFixtureRepo("roboreviewer-test-");
   await fs.writeFile(
     path.join(tempDir, "app.js"),
@@ -37,7 +37,8 @@ export async function createMockWorkflowRepo() {
     path.join(tempDir, ".roboreviewer", "config.json"),
     `${JSON.stringify(
       {
-        schema_version: 1,
+        schema_version: 2,
+        autoUpdate,
         agents: {
           director: { tool: AGENT_TOOLS.MOCK },
           reviewers: [{ tool: AGENT_TOOLS.MOCK }],
@@ -66,11 +67,13 @@ export async function runCommandWithInput({
   args,
   cwd,
   input,
+  closeDelayMs = 5000,
 }: {
   command: string;
   args: string[];
   cwd: string;
   input: string;
+  closeDelayMs?: number;
 }) {
   await new Promise<void>((resolve, reject) => {
     const child = spawn(command, args, {
@@ -94,7 +97,9 @@ export async function runCommandWithInput({
     });
 
     child.stdin.write(input);
-    child.stdin.end();
+    setTimeout(() => {
+      child.stdin.end();
+    }, closeDelayMs);
   });
 }
 

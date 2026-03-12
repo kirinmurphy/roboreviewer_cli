@@ -1,7 +1,7 @@
 import { stdin as input, stdout as output } from "node:process";
 import readline from "node:readline";
 
-type Prompter = {
+export type Prompter = {
   ask(message: string, defaultValue?: string): Promise<string>;
   confirm(message: string, defaultYes?: boolean): Promise<boolean>;
   choose(message: string, options: string[], defaultIndex?: number): Promise<string>;

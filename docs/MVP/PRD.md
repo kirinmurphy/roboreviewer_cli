@@ -20,10 +20,10 @@ Build a reliable CLI for structured multi-agent code review and implementation w
 
 ## 2. Workflow Overview
 
-The system has two phases:
+The system has two main phases:
 
-1. A non-interactive review-and-implementation run.
-2. A deferred human resolution pass only if non-consensus items remain.
+1. A review iteration that collects findings, asks for any required user decisions inline, and then performs one combined implementation pass.
+2. A post-iteration loop where the user can repeat the scan or end the session.
 
 ```mermaid
 flowchart TD
@@ -31,8 +31,8 @@ flowchart TD
         direction TB
         A[Run roboreviewer init]
         C[Run roboreviewer review target]
-        M[Run roboreviewer resolve<br/>Optional if non-consensus items remain]
-        R[Run roboreviewer resume<br/>Optional during interrupted resolve]
+        M[Resolve disputed findings inline<br/>during review]
+        R[Run roboreviewer resume<br/>Optional during interrupted inline resolution]
     end
 
     subgraph O[Orchestrator]
@@ -43,9 +43,11 @@ flowchart TD
         H[Collect findings and route peer feedback]
         H2[Resolve pushback and mark implementation-ready work]
         J[Write summary and persist session state]
-        K{Non-consensus<br>items?}
+        K{Need user decision?}
         S[Continue from saved cursor at stored phase]
-        P[Update summary and mark session complete]
+        P[Repeat scan without audit tools]
+        P2{Re-scan or end?}
+        P3[Update summary and mark session complete]
         Q{Interrupted?}
     end
 
@@ -79,10 +81,12 @@ flowchart TD
     H --> G2B
     G1B --> H2
     G2B --> H2
-    H2 --> I --> J --> K
-    K -->|No| P
-    K -->|Yes| M --> O1 --> P
-    P ~~~ Q
+    H2 --> K
+    K -->|Yes| M --> O1 --> J --> P2
+    K -->|No| I --> J --> P2
+    P2 -->|Repeat scan| P --> F
+    P2 -->|End| P3
+    P3 ~~~ Q
     Q -->|Yes| R --> S
 ```
 
@@ -93,16 +97,17 @@ flowchart TD
 | Command                             | Purpose                                                                                                                                               |
 | ----------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `roboreviewer init`                | Perform one-time repository setup and create `.roboreviewer/config.json`.                                                                            |
-| `roboreviewer review <commit-ish>` | Run the full automated review loop non-interactively for the specified commit range, including that commit and every following commit through `HEAD`. |
-| `roboreviewer review --last`       | Run the full automated review loop non-interactively for the most recent commit only.                                                                 |
-| `roboreviewer resolve`             | Open queued non-consensus conflicts from a completed review run and collect human decisions.                                                          |
-| `roboreviewer resume`              | Continue an interrupted `resolve` workflow from persisted state.                                                                                      |
+| `roboreviewer review <commit-ish>` | Run the review loop for the specified commit range, collect inline user decisions if needed, implement the approved findings, then prompt to re-scan or end. |
+| `roboreviewer review --last`       | Run the same review loop for the most recent commit only.                                                                                                  |
+| `roboreviewer resolve`             | Resume an interrupted inline non-consensus resolution or final implementation step from the current session.                                             |
+| `roboreviewer resume`              | Alias for continuing an interrupted resolution workflow from persisted state.                                                                              |
 
 Operational expectations:
 
 - The automated review loop will avoid destructive git operations.
 - Summary output and persisted state will remain consistent throughout execution.
-- The repository must start from a clean working tree before `roboreviewer review` begins.
+- The repository must start from a clean working tree before the initial `roboreviewer review` begins.
+- Repeat scans may include unstaged and untracked workspace changes.
 
 ## 4. Workflow
 
@@ -157,17 +162,41 @@ Operational expectations:
 ### 4.6 Resolution - Consensus Items
 
 1. Findings accepted without pushback, including all findings in single-agent mode, will be treated as implementation-ready.
-1. Implementation-ready findings will be implemented by the Director during the main automated run.
+1. `.roboreviewer/config.json` will include a top-level `autoUpdate` boolean.
+1. When `autoUpdate` is `true`, review-consensus findings will be implemented without a per-item approval prompt and `user_approved` will remain `null`.
+1. When `autoUpdate` is `false`, each review-consensus finding will be presented to the user for approval before implementation.
+1. When `autoUpdate` is `false`, each review-consensus finding will persist `user_approved: true` or `user_approved: false`, and only `true` findings will be implemented.
+1. Rejected consensus findings will remain tracked in session state but will not be reintroduced in later repeat scans.
 
 ### 4.7 Resolution - Non-Consensus Items
 
-1. `roboreviewer resolve` will present queued non-consensus items through a guided interactive decision flow in the terminal.
+1. Non-consensus items will be presented through a guided interactive decision flow inside the main `roboreviewer review` command before the Director implements any accepted findings.
 1. The resolution flow will present one queued item at a time with the finding summary, reviewer positions, relevant context, and the available decision options `Implement Disputed Recommendation` and `Discard Disputed Recommendation`.
 1. User decisions will be persisted after each step so the workflow can resume safely after interruption.
-1. After human decisions are collected, the Director will perform one final implementation turn in the same `resolve` workflow that applies only the disputed recommendations marked for implementation, without reopening another peer-review cycle.
+1. After user decisions are collected, the Director will perform one implementation turn that applies both the approved review-consensus findings and the approved non-consensus findings together, without reopening another peer-review cycle.
 1. HITL decisions will survive restart and crash, and `roboreviewer resume` will continue an interrupted resolution workflow from persisted state, including the final Director implementation turn if decisions were already recorded.
 1. Broad automated-loop resume behavior is deferred to a future phase.
 1. The final Director-only turn will be correct and idempotent.
+
+### 4.8 Repeat Scan
+
+1. After each review iteration, the CLI will prompt the user to:
+   - repeat the scan
+   - end the scan
+1. Repeat scans will skip all audit tools, even if they were enabled for the initial scan.
+1. Repeat scans will use the original committed review scope plus current unstaged and untracked workspace changes.
+1. Repeat scans will not require a clean working tree.
+1. Repeat scans will ignore findings that were already tracked in earlier iterations, including previously discarded or rejected items.
+1. New findings discovered during repeat scans will be appended to `session.json`.
+1. Reviewer findings will persist explicit disposition metadata:
+   - `resolution_status`
+   - `roboreview_outcome`
+   - `decided_by`
+   - `user_approved`
+1. Finding IDs will be namespaced by scan iteration:
+   - first scan: `f-1001+`
+   - second scan: `f-2001+`
+   - third scan: `f-3001+`
 
 ## 5. Configuration and Initialization
 
@@ -188,7 +217,8 @@ your-project/
 
 ```json
 {
-  "schema_version": 1,
+  "schema_version": 2,
+  "autoUpdate": true,
   "agents": {
     "director": {
       "tool": "claude-code"

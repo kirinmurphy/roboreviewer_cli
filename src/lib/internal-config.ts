@@ -64,12 +64,32 @@ export const INTERNAL_CONFIG = {
     unresolvedConflictsTitle: "## Unresolved Conflicts",
     resolvedDisputesTitle: "## Resolved Disputes",
     consensusFixesTitle: "## Consensus Fixes",
+    discardedFindingsTitle: "## Discarded Findings",
     auditFindingsNotAdoptedTitle: "## Audit Findings Not Adopted",
     reviewLogTitle: "## Review Log",
     sessionStatsTitle: "## Session Stats",
   },
   cli: {
     sectionDividerWidth: 64,
+    valueStyles: {
+      ids: {
+        tone: "green",
+        bold: true,
+      },
+      severityBadges: {
+        reviewer: {
+          low: "blue",
+          medium: "yellow",
+          high: "red",
+        },
+        audit: {
+          critical: "red",
+          major: "yellow",
+          minor: "blue",
+          trivial: "cyan",
+        },
+      },
+    },
     init: {
       wizardTitle: "Roboreviewer Setup Wizard",
       repositorySectionTitle: "Repository Context",

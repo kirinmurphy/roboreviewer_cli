@@ -1,6 +1,6 @@
 import path from "node:path";
 
-export const SCHEMA_VERSION = 1;
+export const SCHEMA_VERSION = 2;
 export const CONFIG_DIR = ".roboreviewer";
 export const RUNTIME_DIR = path.join(CONFIG_DIR, "runtime");
 export const CONFIG_PATH = path.join(CONFIG_DIR, "config.json");
@@ -28,6 +28,32 @@ export const CLI_COMMANDS = {
   REVIEW: "review",
   RESOLVE: "resolve",
   RESUME: "resume",
+} as const;
+
+export const DEFAULT_AUTO_UPDATE = true;
+
+export const REVIEW_IMPLEMENTATION_MODES = {
+  AUTO_APPROVE_CONSENSUS: "auto_approve_consensus",
+  MANUAL_APPROVE_EACH: "manual_approve_each",
+} as const;
+
+export const REVIEW_IMPLEMENTATION_MODE_LABELS = {
+  AUTO_APPROVE_CONSENSUS:
+    "Have recommendations implemented automatically when all roboreviewers agree",
+  MANUAL_APPROVE_EACH:
+    "Manually review each recommendation and approve or deny each change",
+} as const;
+
+export const POST_REVIEW_ACTIONS = {
+  RESOLVE: "resolve",
+  REPEAT_SCAN: "repeat_scan",
+  END_SCAN: "end_scan",
+} as const;
+
+export const POST_REVIEW_ACTION_LABELS = {
+  RESOLVE: "Address Non-Consensus Findings",
+  REPEAT_SCAN: "Scan the code again to look for additional issues",
+  END_SCAN: "End Scan",
 } as const;
 
 export const REQUEST_TYPES = {
@@ -106,4 +132,19 @@ export const AUDIT_FINDING_STATUSES = {
 export const IMPLEMENTATION_PHASES = {
   REVIEW: "review",
   RESOLVE: "resolve",
+} as const;
+
+export const RESOLUTION_STATUSES = {
+  IMPLEMENTED: "implemented",
+  DISCARDED: "discarded",
+} as const;
+
+export const ROBOVIEW_OUTCOMES = {
+  CONSENSUS: "consensus",
+  NON_CONSENSUS: "non_consensus",
+} as const;
+
+export const DECIDED_BY = {
+  ROBOREVIEWER: "roboreviewer",
+  USER: "user",
 } as const;

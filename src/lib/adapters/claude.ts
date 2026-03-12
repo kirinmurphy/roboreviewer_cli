@@ -1,6 +1,12 @@
 import { AGENT_TOOLS, AUDIT_ASSESSMENT_DISPOSITIONS, EXECUTION_STATUSES, REQUEST_TYPES } from "../constants.ts";
 import { FINDING_CATEGORY_LIST, FINDING_SEVERITY_LIST } from "../internal-config.ts";
-import { buildCommonPromptSections, createImplementationResponse, createPushbackResponse, createReviewResponse } from "./shared.ts";
+import {
+  buildCommonPromptSections,
+  buildReviewFocusSection,
+  createImplementationResponse,
+  createPushbackResponse,
+  createReviewResponse,
+} from "./shared.ts";
 import { runCommand, type CommandResult } from "../system/shell.ts";
 
 export function createClaudeAdapter() {
@@ -124,6 +130,7 @@ function buildPrompt(request: any): string {
       "You are Roboreviewer running a strict structured review.",
       "Return only valid JSON and no surrounding commentary.",
       "Use repository-relative file paths.",
+      buildReviewFocusSection(),
       "For every provided audit finding, return an audit_assessments entry with disposition adopt or reject and a concise reason.",
       "If you adopt an audit finding, also emit a normal finding that references its audit_finding_id in related_audit_ids.",
       "If a finding is based on audit tool output, include the matching audit ID in related_audit_ids.",

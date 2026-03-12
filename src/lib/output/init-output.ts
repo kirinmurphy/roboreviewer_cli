@@ -16,14 +16,23 @@ const ANSI = {
 export function renderInitBanner() {
   return [
     "",
-    renderSectionHeader({ title: INTERNAL_CONFIG.cli.init.wizardTitle, tone: "cyan" }),
-    `${formatStageLabel({ label: "Goal" })} Configure ${colorize({ text: "roboreviewer", tone: "cyan", bold: true })} for this repository.`,
+    renderSectionHeader({
+      title: INTERNAL_CONFIG.cli.init.wizardTitle,
+      tone: "cyan",
+    }),
+    `\nConfigure ${colorize({ text: "roboreviewer", tone: "cyan", bold: true })} for this repository.`,
     "",
   ].join("\n");
 }
 
-export function renderInitSection({ title, tone = "blue" }: { title: string; tone?: Tone }) {
-  return `${renderSectionHeader({ title, tone })}\n\n`;
+export function renderInitSection({
+  title,
+  tone = "blue",
+}: {
+  title: string;
+  tone?: Tone;
+}) {
+  return `\n${renderSectionHeader({ title, tone })}\n`;
 }
 
 export function renderInitStatus({ message }: { message: string }) {
@@ -38,31 +47,45 @@ export function renderInitError({ message }: { message: string }) {
   return `${indent(1)}${colorize({ text: "Error:", tone: "red", bold: true })} ${message}\n`;
 }
 
-export function renderInitConfirmation({ installedTools }: { installedTools: any[] }) {
+export function renderInitConfirmation({
+  installedTools,
+}: {
+  installedTools: any[];
+}) {
   const lines = [
     "",
-    renderSectionHeader({ title: INTERNAL_CONFIG.cli.init.readyTitle, tone: "green" }),
+    renderSectionHeader({
+      title: INTERNAL_CONFIG.cli.init.readyTitle,
+      tone: "green",
+    }),
     `${formatStageLabel({ label: "Config" })} ${CONFIG_PATH}`,
-    colorize({ text: "-".repeat(INTERNAL_CONFIG.cli.sectionDividerWidth), tone: "gray" }),
+    `${formatStageLabel({ label: "Gitignore" })} Added .roboreviewer/`,
+    colorize({
+      text: "-".repeat(INTERNAL_CONFIG.cli.sectionDividerWidth),
+      tone: "gray",
+    }),
   ];
 
-  if (installedTools.length === 0) {
-    lines.push("No third-party CLIs were installed during this setup run.");
+  if (installedTools.length > 0) {
+    lines.push(
+      `${indent(1)}${colorize({ text: "Installed during setup", tone: "green", bold: true })}`,
+    );
+    for (const tool of installedTools) {
+      lines.push(`${indent(2)}${tool.displayName}`);
+      if (tool.verifyCommand) {
+        lines.push(
+          `${indent(3)}${formatStageLabel({ label: "Check" })} ${tool.verifyCommand}`,
+        );
+      }
+      if (tool.launchCommand) {
+        lines.push(
+          `${indent(3)}${formatStageLabel({ label: "Launch" })} ${tool.launchCommand}`,
+        );
+      }
+    }
     lines.push("");
-    return lines.join("\n");
   }
 
-  lines.push(`${indent(1)}${colorize({ text: "Installed during setup", tone: "green", bold: true })}`);
-  for (const tool of installedTools) {
-    lines.push(`${indent(2)}${tool.displayName}`);
-    if (tool.verifyCommand) {
-      lines.push(`${indent(3)}${formatStageLabel({ label: "Check" })} ${tool.verifyCommand}`);
-    }
-    if (tool.launchCommand) {
-      lines.push(`${indent(3)}${formatStageLabel({ label: "Launch" })} ${tool.launchCommand}`);
-    }
-  }
-  lines.push("");
   return lines.join("\n");
 }
 
@@ -79,7 +102,15 @@ function formatStageLabel({ label }: { label: string }) {
   return colorize({ text: `${label}:`, tone: "gray", bold: true });
 }
 
-function colorize({ text, tone, bold = false }: { text: string; tone: Tone; bold?: boolean }) {
+function colorize({
+  text,
+  tone,
+  bold = false,
+}: {
+  text: string;
+  tone: Tone;
+  bold?: boolean;
+}) {
   if (!process.stdout.isTTY) {
     return text;
   }

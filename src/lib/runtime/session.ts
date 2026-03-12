@@ -67,6 +67,7 @@ export function createSession({ sessionId, reviewTarget, docsFiles, docsBytes, r
     review_target: {
       mode: reviewTarget.mode,
       selector: reviewTarget.selector,
+      diff_base: reviewTarget.diffBase,
       resolved_commit_count: reviewTarget.commitShas.length,
       commits: reviewTarget.commitMessages,
       changed_files: [],
