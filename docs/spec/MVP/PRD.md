@@ -94,13 +94,13 @@ flowchart TD
 
 ## 3. Commands and Execution Model
 
-| Command                             | Purpose                                                                                                                                               |
-| ----------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `roboreviewer init`                | Perform one-time repository setup and create `.roboreviewer/config.json`.                                                                            |
-| `roboreviewer review <commit-ish>` | Run the review loop for the specified commit range, collect inline user decisions if needed, implement the approved findings, then prompt to re-scan or end. |
-| `roboreviewer review --last`       | Run the same review loop for the most recent commit only.                                                                                                  |
-| `roboreviewer resolve`             | Resume an interrupted inline non-consensus resolution or final implementation step from the current session.                                             |
-| `roboreviewer resume`              | Alias for continuing an interrupted resolution workflow from persisted state.                                                                              |
+| Command                            | Purpose                                                                                                      |
+| ---------------------------------- | ------------------------------------------------------------------------------------------------------------ |
+| `roboreviewer init`                | Perform one-time repository setup and create `.roboreviewer/config.json`.                                    |
+| `roboreviewer review <commit-ish>` | Run the review loop for the specified commit range                                                           |
+| `roboreviewer review --last`       | Run the same review loop for the most recent commit only.                                                    |
+| `roboreviewer resolve`             | Resume an interrupted inline non-consensus resolution or final implementation step from the current session. |
+| `roboreviewer resume`              | Alias for continuing an interrupted resolution workflow from persisted state.                                |
 
 Operational expectations:
 
@@ -343,27 +343,27 @@ See [`docs/future_phase/deferred-scope.md`](/Users/kirinmurphy/projects/prototyp
 | **Director**     | The AI agent with write access that implements code changes and always participates in the effective reviewer set. |
 | **Reviewer**     | An additional AI agent, typically read-only, that analyzes code and critiques findings.                            |
 | **Orchestrator** | The control system that coordinates agents, state, and workflow transitions.                                       |
-| **Adapter**      | Integration layer that connects Roboreviewer to a specific tool such as a Director Adapter or Reviewer Adapter.   |
+| **Adapter**      | Integration layer that connects Roboreviewer to a specific tool such as a Director Adapter or Reviewer Adapter.    |
 
 ### Review Process
 
-| Term                         | Definition                                                                                               |
-| ---------------------------- | -------------------------------------------------------------------------------------------------------- |
-| **Finding**                  | A single code issue identified by a reviewer.                                                            |
+| Term                         | Definition                                                                                                                 |
+| ---------------------------- | -------------------------------------------------------------------------------------------------------------------------- |
+| **Finding**                  | A single code issue identified by a reviewer.                                                                              |
 | **Merged Finding**           | A consolidated finding representing the same issue identified by both reviewers, with attribution retained for both tools. |
-| **Peer Review**              | When one reviewer evaluates another reviewer's findings.                                                 |
-| **Pushback**                 | A reviewer's disagreement with another reviewer's finding.                                               |
-| **Non-consensus**            | A finding that remains disputed after pushback resolution and is queued for human decision.              |
-| **HITL (Human-in-the-Loop)** | The interactive resolution flow where the user either implements or discards queued non-consensus items. |
+| **Peer Review**              | When one reviewer evaluates another reviewer's findings.                                                                   |
+| **Pushback**                 | A reviewer's disagreement with another reviewer's finding.                                                                 |
+| **Non-consensus**            | A finding that remains disputed after pushback resolution and is queued for human decision.                                |
+| **HITL (Human-in-the-Loop)** | The interactive resolution flow where the user either implements or discards queued non-consensus items.                   |
 
 ### State and Outputs
 
-| Term                         | Definition                                                                          |
-| ---------------------------- | ----------------------------------------------------------------------------------- |
-| **Session State**            | Persisted runtime state stored in `.roboreviewer/runtime/session.json`.            |
-| **Cursor**                   | Pointer indicating the current phase and next pending item in a resumable workflow. |
-| **ROBOREVIEWER_SUMMARY.md** | Human-readable runtime report stored in `.roboreviewer/runtime/`.                  |
-| **Review Log**               | Summary of reviewer findings plus their resolution status.                          |
+| Term                        | Definition                                                                          |
+| --------------------------- | ----------------------------------------------------------------------------------- |
+| **Session State**           | Persisted runtime state stored in `.roboreviewer/runtime/session.json`.             |
+| **Cursor**                  | Pointer indicating the current phase and next pending item in a resumable workflow. |
+| **ROBOREVIEWER_SUMMARY.md** | Human-readable runtime report stored in `.roboreviewer/runtime/`.                   |
+| **Review Log**              | Summary of reviewer findings plus their resolution status.                          |
 
 ---
 
