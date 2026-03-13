@@ -86,7 +86,7 @@ Why defer it:
 
 - Resume during interactive conflict resolution is the highest-value case
 - Full loop recovery introduces significant orchestration and git-state complexity
-- The first version can require restarting `review` while still supporting `resolve` resumption
+- The first version can require restarting `review` while still supporting `resume` resumption
 
 ## 6. Strict Determinism Controls
 
@@ -170,10 +170,10 @@ The initial implementation should stay focused on:
 
 - `roboreviewer init`
 - `roboreviewer review <commit-ish>`
-- `roboreviewer resolve`
+- `roboreviewer resume`
 - One Director and zero or one Reviewer
 - Simple peer review and pushback routing
 - Deferred human resolution for non-consensus findings
 - One configured docs path
 - Non-destructive git behavior
-- Basic persisted state, especially for `resolve`
+- Basic persisted state, especially for `resume`

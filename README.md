@@ -1,27 +1,27 @@
-# Roboreviewer
+# roboreviewer
 
-Roboreviewer is an automated code reviewer that marshalls numerous CLI tools into one coordnated CLI workflow for AI assisted code reviews.
+`roboreviewer` is an automated code reviewer CLI that marshals numerous other CLI tools into one coordinated workflow for AI assisted reviews.
 
-Instead of manually interacting with several different AI tools for verifying code quality, Roboreviewer implements an automated workflow that captures and cross-references feedback across numerous tools.
+Instead of manually interacting with several different AI tools for verifying code quality, `roboreviewer` captures, cross-references, validates and implements feedback across numerous tools.
 
 ## How it works
 
-Roboreviewer:
+`roboreviewer`:
 
-- Collects feedback from static audit tools like Code Rabbit
-- Feeds commits, audit tool feedback and README docs to >=1 CLI coding agents (codex, claude code) for analysis
-- Cross references findings and applies a peer-review consensus mechanism to reinforce confidence in updates.
+- Collects findings from static audit tools like CodeRabbit
+- Feeds commits, audit tool findings and README docs to >=1 CLI coding agents for analysis
+- Applies a peer-review consensus mechanism to agent findings to reinfoce feedback confidence.
 - Provides the option to have recommendations updated automatically or after user approval.
-- Requires user to tie-break findings that did not reach consensus across tools.
-- Employs primary "Director" agent to automatically update code based on consensus.
-- Allows repeat smart scans to ensure fewer issues fall through the cracks.
+- Requires user to tie-break findings that did not reach consensus across agents.
+- Employs primary "Director" agent to automatically update code based on consensus and user feedback.
+- Allows repeat smart scans to prevent issues from falling through the cracks.
 
 ---
 
 ```mermaid
 flowchart TD
     commits["Code commit(s)"]
-    audits["Audit tool(s) analysis<br>(Code rabbit, etc.)"]
+    audits["Audit tool(s) analysis<br>(CodeRabbit, etc.)"]
     docs["Referenced README docs"]
     scope["Create review scope"]
     queueImpl["Queue finding<br>for implementation"]
@@ -29,7 +29,7 @@ flowchart TD
     userQueue["Queue finding<br>for user review"]
     user{"User<br>decides"}
     implement["Implement finding(s)"]
-    discard["Discard finding(s)"]
+    discard["Discard finding"]
 
     subgraph R1[Reviewer 1 codex]
         direction TB
@@ -94,21 +94,18 @@ flowchart TD
 
 ## Setup Instructions
 
-Follow the instructions in [this doc](docs/setup-instructions.md) to set up Roboreviewer on your local machine.
+Follow [these instructions](docs/setup-instructions.md) to set up `roboreviewer` on your local machine.
 
 ## Commands
 
-| Command                            | Purpose                                                              |
-| ---------------------------------- | -------------------------------------------------------------------- |
-| `roboreviewer init`                | Initialize repository-local Roboreviewer configuration.              |
-| `roboreviewer review <commit-ish>` | Review a specific commit range or target revision.                   |
-| `roboreviewer review --last`       | Review the latest commit only.                                       |
-| `roboreviewer resolve`             | Continue the human resolution flow for queued non-consensus items.   |
-| `roboreviewer resume`              | Resume an interrupted review or resolution session from saved state. |
+| Command                            | Purpose                                                                        |
+| ---------------------------------- | ------------------------------------------------------------------------------ |
+| `roboreviewer init`                | Initialize repository-specific `roboreviewer` configuration.                   |
+| `roboreviewer review --last`       | Review the latest commit.                                                      |
+| `roboreviewer review <commit-ish>` | Review a commit range from the included commit hash to the most recent commit. |
+| `roboreviewer resume`              | Resume any paused review session from saved state.                             |
 
 ## Available CLI Tools
-
-If you do not already have one of these tools installed, it will be installed when you select it.
 
 Supported agent adapters in this build:
 
@@ -120,76 +117,60 @@ Supported built-in audit tool:
 
 - `coderabbit`
 
-## Initializing Repo
+Any tools not already installed will be installed automatically if enabled during `roboreview init`.
 
-Running `roboreviewer init` creates the committed repository config:
+## `roboreviewer init`
 
-```text
-.roboreviewer/config.json
+Running `roboreviewer init` triggers the init setup wizard for each repository:
+
+  <div style="max-width: 700px; border: 1px solid #555; border-radius:8px; overflow:hidden;">
+    <img src="docs/images/roboreviewer_init.png" alt="Roboreviewer init wizard"
+  width="100%" />
+  </div>
+
+<br/>
+
+and produces `.roboreviewer/config.json`
+
+```json
+{
+  "schema_version": 1,
+  "autoUpdate": false,
+  "agents": {
+    "director": {
+      "tool": "codex"
+    },
+    "reviewers": [
+      {
+        "tool": "claude-code"
+      }
+    ]
+  },
+  "audit_tools": [
+    {
+      "id": "coderabbit",
+      "enabled": true
+    }
+  ],
+  "context": {
+    "docs_path": "docs/spec/MVP",
+    "max_docs_bytes": 200000
+  }
+}
 ```
 
-That file stores the selected tools, docs settings, and `autoUpdate`.
+Running `roboreview init` a second time requires confirmation to overwrite file with new configuration.
 
-A typical init flow looks like this:
+## `roboreviewer review`
 
-```text
-========================================
-Roboreviewer Init Wizard
-========================================
+Running `roboreviewer` triggers a review workflow
 
-Configure roboreviewer for this repository.
+[EXAMPLE REVIEW CLI SCREENSHOTS PLACEHOLDER - coming soon]
 
-========================================
-Repository
-========================================
+and produces `.roboreviewer/runtime/session.json`
 
-? Do you have a docs folder to provide global context for the reviewers? Yes
-? Docs path docs
-? Max docs bytes 200000
+[EXAMPLE REVIEW session.json PLACEHOLDER - coming soon]
 
-========================================
-Agents
-========================================
-
-? Pick the main tool (Director) for reviews and updates codex (installed)
-? Add a second reviewer? Yes
-? Second reviewer tool claude-code (installed)
-
-========================================
-Audit Tools
-========================================
-
-? Enable CodeRabbit audit tool? No
-
-? How would you like to implement review recommendations:
-  > Have recommendations implemented automatically when all roboreviewers agree
-    Manually review each recommendation and approve or deny each change
-
-========================================
-Authentication
-========================================
-
-? Have you already authenticated Codex on this machine? Yes
-? Have you already authenticated Claude Code on this machine? Yes
-
-========================================
-Roboreviewer Is Ready
-========================================
-
-Config: .roboreviewer/config.json
-Gitignore: Added .roboreviewer/
-```
-
-## Review Output
-
-A review run writes runtime output here:
-
-```text
-.roboreviewer/runtime/session.json
-.roboreviewer/runtime/ROBOREVIEWER_SUMMARY.md
-```
-
-`session.json` is the tool's full runtime state and source of truth for resume/resolve.
-`ROBOREVIEWER_SUMMARY.md` is the human-readable summary derived from that session state.
+## License
 
 This project is licensed under MIT.

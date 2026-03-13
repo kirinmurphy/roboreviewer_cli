@@ -16,6 +16,8 @@ AI coding tools can produce useful code changes quickly, but they do not reliabl
 
 Build a reliable CLI for structured multi-agent code review and implementation with deterministic workflow ordering, safe git handling, resumable state, and explicit human decision points where needed.
 
+This PRD is the authoritative MVP product document for the current repository build. Where earlier draft expectations conflicted with later implementation decisions, the current implemented behavior takes precedence.
+
 ---
 
 ## 2. Workflow Overview
@@ -94,13 +96,12 @@ flowchart TD
 
 ## 3. Commands and Execution Model
 
-| Command                            | Purpose                                                                                                      |
-| ---------------------------------- | ------------------------------------------------------------------------------------------------------------ |
-| `roboreviewer init`                | Perform one-time repository setup and create `.roboreviewer/config.json`.                                    |
-| `roboreviewer review <commit-ish>` | Run the review loop for the specified commit range                                                           |
-| `roboreviewer review --last`       | Run the same review loop for the most recent commit only.                                                    |
-| `roboreviewer resolve`             | Resume an interrupted inline non-consensus resolution or final implementation step from the current session. |
-| `roboreviewer resume`              | Alias for continuing an interrupted resolution workflow from persisted state.                                |
+| Command                            | Purpose                                                                   |
+| ---------------------------------- | ------------------------------------------------------------------------- |
+| `roboreviewer init`                | Perform one-time repository setup and create `.roboreviewer/config.json`. |
+| `roboreviewer review <commit-ish>` | Run the review loop for the specified commit range                        |
+| `roboreviewer review --last`       | Run the same review loop for the most recent commit only.                 |
+| `roboreviewer resume`              | Resume any paused review workflow from the current session state.         |
 
 Operational expectations:
 
@@ -108,6 +109,7 @@ Operational expectations:
 - Summary output and persisted state will remain consistent throughout execution.
 - The repository must start from a clean working tree before the initial `roboreviewer review` begins.
 - Repeat scans may include unstaged and untracked workspace changes.
+- This repository build targets Node.js 22+ and runs directly from TypeScript source using Node's `--experimental-strip-types` support.
 
 ## 4. Workflow
 
@@ -143,11 +145,15 @@ Operational expectations:
    - Each reviewer may incorporate or disregard the audit feedback in their own findings.
    - Audit-tool findings are advisory input only in v1 and do not become first-class findings unless a reviewer adopts them.
    - Audit-tool findings are not directly part of the reviewer pushback workflow.
+   - In this repository build, CodeRabbit integration is best-effort and shells out to `coderabbit review --plain`.
+   - Audit items are persisted separately in session state even when no reviewer adopts them.
+   - Reviewer findings may optionally reference adopted audit items through `related_audit_ids`.
 
 ### 4.4 Initial and Peer Review
 
 1. Each configured reviewer will analyze the same resolved review target and produce findings with stable attribution metadata.
    - In v1, each finding should include a summary, recommendation, severity, and location.
+1. Before peer review, the orchestrator may perform deterministic exact-match deduplication when two findings have the same normalized file, line, summary, and recommendation.
 1. When a second reviewer is configured, the Director and Reviewer will peer-review each other's findings.
 1. Reviewers will not peer-review their own findings.
 
@@ -177,6 +183,7 @@ Operational expectations:
 1. HITL decisions will survive restart and crash, and `roboreviewer resume` will continue an interrupted resolution workflow from persisted state, including the final Director implementation turn if decisions were already recorded.
 1. Broad automated-loop resume behavior is deferred to a future phase.
 1. The final Director-only turn will be correct and idempotent.
+1. When a review run ends with unresolved conflicts, session status will remain `paused` until `resume` completes the human-in-the-loop flow.
 
 ### 4.8 Repeat Scan
 
@@ -207,8 +214,8 @@ All repository-local settings will live in `.roboreviewer/config.json`.
 ```text
 your-project/
   .roboreviewer/
-    config.json          # Commit this
-    runtime/             # Gitignore this whole directory
+    config.json          # Repository-local config
+    runtime/             # Runtime artifacts
   src/
   docs/
 ```
@@ -217,7 +224,7 @@ your-project/
 
 ```json
 {
-  "schema_version": 2,
+  "schema_version": 1,
   "autoUpdate": true,
   "agents": {
     "director": {
@@ -232,16 +239,17 @@ your-project/
   "audit_tools": [
     {
       "id": "coderabbit",
-      "enabled": true
+      "enabled": true,
+      "auto_implement": {
+        "enabled": false,
+        "min_severity": "minor",
+        "only_refactor_suggestions": false
+      }
     }
   ],
   "context": {
     "docs_path": "docs/requirements",
     "max_docs_bytes": 200000
-  },
-  "runtime": {
-    "deterministic": true,
-    "max_retries": 3
   }
 }
 ```
@@ -249,10 +257,17 @@ your-project/
 `agents.director` defines the implementation agent and also implicitly adds that tool to the reviewer set.  
 `agents.reviewers` should contain only the optional second reviewer beyond the Director.
 
+For this repository build, supported adapter IDs are `codex`, `claude-code`, and `mock`.
+
 `audit_tools` contains optional built-in audit-tool integrations configured by reserved IDs such as `coderabbit`.
 
-`context.docs_path` is an optional repository-local documentation folder for this specific project and the only configured docs source in v1.
-`context.max_docs_bytes` defines the maximum total size of documentation loaded from either `context.docs_path` or an overriding `--docs <path>`.
+`context.docs_path` is an optional repository-local documentation file or folder for this specific project and the only configured docs source in v1.
+`context.max_docs_bytes` defines the maximum total size of documentation loaded from either `context.docs_path` or an overriding `--docs <file-or-folder>`.
+
+For this repository build:
+
+- `roboreviewer init` defaults the Director to `codex`.
+- `roboreviewer init` defaults the docs path to `docs` when that directory exists; otherwise it leaves the docs path empty.
 
 **Initialization behavior:**
 
@@ -262,23 +277,29 @@ roboreviewer init
 
 `roboreviewer init` will:
 
-1. Prompt for an optional repository-local docs path.
-2. Prompt for a documentation-size limit.
-3. Prompt for Director and optional second-reviewer role selection.
-4. Prompt for enabling or disabling supported built-in audit tools such as CodeRabbit.
-5. Create `.roboreviewer/config.json` with sensible defaults plus the supplied paths, role selections, and audit-tool selections.
-6. Ask whether to add `.roboreviewer/runtime/` to `.gitignore`, with an option to do it automatically.
+1. Prompt for an optional repository-local docs file or folder path.
+1. Prompt for a documentation-size limit.
+1. Prompt for Director and optional second-reviewer role selection.
+1. Prompt for enabling or disabling supported built-in audit tools such as CodeRabbit.
+1. Create `.roboreviewer/config.json` with sensible defaults plus the supplied paths, role selections, and audit-tool selections.
+1. Check whether selected agent and audit-tool CLIs are available on `PATH`.
+1. When supported tools are missing, it may offer immediate install help.
+1. Tool installation and tool authentication are separate; init should remind users that Codex, Claude, and CodeRabbit may still require manual local authentication/setup after installation.
+1. Re-running `roboreviewer init` must ask for confirmation before replacing an existing `.roboreviewer/config.json`.
+1. Automatically add `.roboreviewer/` to `.gitignore`, with an option to do it automatically.
+1. After a successful run, print a readiness block that points users to `.roboreviewer/config.json` and, when setup installed third-party tools, shows commands to verify and launch them.
 
-Before `roboreviewer review` or `roboreviewer resolve` begins work, the system will validate that the config satisfies the minimum schema and runtime requirements. Validation in v1 is technical only, such as config shape, git state, path existence, and byte limits. It will not attempt to validate whether documentation fully captures project-specific business rules.
+Before `roboreviewer review` or `roboreviewer resume` begins work, the system will validate that the config satisfies the minimum schema and runtime requirements. Validation in v1 is technical only, such as config shape, git state, path existence, and byte limits. It will not attempt to validate whether documentation fully captures project-specific business rules.
 
 `roboreviewer init` should launch an interactive setup wizard inside the terminal rather than rely on ad hoc prompts alone, but the product should remain command-based rather than depend on a general-purpose REPL.
 
 Non-interactive initialization is out of scope for v1 and may be added in a future phase.
 
-**What to commit:**
+**Gitignore behavior in this repository build:**
 
-- ✅ `.roboreviewer/config.json`
-- ❌ `.roboreviewer/runtime/`
+- When users accept the init helper, the CLI adds `.roboreviewer/` to `.gitignore`.
+- This makes both `.roboreviewer/config.json` and `.roboreviewer/runtime/` local by default in the current build.
+- Teams that want to share config may still choose a different repository policy, but shared config is not the default assumption in this build.
 
 ---
 
@@ -291,9 +312,9 @@ Non-interactive initialization is out of scope for v1 and may be added in a futu
    - `.claude/rules/*.md` for Claude-compatible tools
 3. Roboreviewer should not duplicate or override native rule discovery unless two tools would otherwise receive meaningfully different instruction context for the same review target.
 4. When native behavior diverges across tools, the orchestrator may add a small normalized context block that clarifies which discovered rule files apply and what precedence order should be followed.
-5. Optional product or requirements documentation should be loaded from the configured docs path and may be overridden per run via `--docs <path>`.
-6. Whether documentation is loaded from `context.docs_path` or from `--docs <path>`, Roboreviewer will recursively load `.md` and `.txt` files, measure the total selected file size, and fail fast with a clear error if the payload exceeds `context.max_docs_bytes`.
-7. When `--docs <path>` is provided, it completely overrides `context.docs_path` for that run.
+5. Optional product or requirements documentation should be loaded from the configured docs file or folder path and may be overridden per run via `--docs <file-or-folder>`.
+6. Whether documentation is loaded from `context.docs_path` or from `--docs <file-or-folder>`, Roboreviewer will read a selected `.md` or `.txt` file or recursively load `.md` and `.txt` files from a selected folder, measure the total selected file size, and fail fast with a clear error if the payload exceeds `context.max_docs_bytes`.
+7. When `--docs <file-or-folder>` is provided, it completely overrides `context.docs_path` for that run.
 8. For commit-range review in v1, the primary review payload sent to agents will be the unified diff for the combined changes from the selected start commit through `HEAD`.
 9. The orchestrator may include a small amount of surrounding metadata with that diff, such as the resolved commit list and changed file paths, but the review contract is diff-first rather than full-file or full-repository analysis.
 
@@ -305,36 +326,157 @@ Performance targets are deferred to a future phase. The first iteration should o
 
 ---
 
-## 8. Implementation Gap Analysis & Resolution
+## 8. Repository Build Decisions
+
+These decisions describe the current repository build where the MVP left room for implementation choice:
+
+1. `mock` is included as a deterministic local adapter so the full workflow remains testable without live agent access.
+1. The `codex` adapter uses `codex exec` with a structured JSON contract for review, peer-review, pushback, and implementation flows.
+1. The `claude-code` adapter uses `claude --print --output-format json` for review-style flows and an implementation configuration that can apply edits non-interactively.
+1. Claude adapter health checks may retry with an isolated runtime `HOME` when the local CLI fails only because it wants to write outside the repository sandbox.
+1. Mock implementation resolves accepted findings by matching persisted evidence text when prior edits have shifted original line numbers.
+1. Live adapter integration tests remain opt-in through environment variables so the default suite stays deterministic and offline-friendly.
+1. Linting is implemented as a repository-local zero-dependency script, and CI verifies `npm run lint`, `npm run typecheck`, and `npm test`.
+
+---
+
+## 9. Implementation Gap Analysis & Resolution
 
 Detailed implementation gaps beyond the MVP scope are deferred to a future phase. The first iteration should focus on clear command behavior, safe git handling, and the core consensus workflow.
 
 ---
 
-## 9. Token Efficiency & Cost Control
+## 10. Token Efficiency & Cost Control
 
-Token-efficiency and cost-optimization features are deferred to a future phase.
+Roboreviewer implements comprehensive token optimization to minimize LLM API costs while maintaining review quality. The system achieves 60-85% token reduction through multiple strategies:
+
+### 10.1. Differential Context Transmission
+
+Each workflow phase receives only the context it needs:
+
+- **Initial Review**: Full diff + filtered documentation
+- **Peer Review**: Findings only (no diff or docs) + read-only file access to verify findings
+- **Pushback Response**: Findings only + read-only file access
+- **Implementation**: Findings only (no documentation - findings are self-contained) + write access
+
+This eliminates redundant transmission of large diffs and documentation across multiple agent invocations.
+
+### 10.2. Smart Documentation Filtering
+
+Documentation is filtered by relevance to changed files before sending to LLM agents:
+
+- File path matching (e.g., `src/lib/runtime/` matches documentation about runtime system)
+- File name matching (e.g., `session.ts` matches sections mentioning "session")
+- Term extraction and relevance scoring
+- Automatic truncation to configured byte limits
+
+This typically reduces documentation size by 30-60% while preserving relevant context.
+
+### 10.3. CodeRabbit-First Workflow
+
+When `auto_implement` is enabled for CodeRabbit, the system:
+
+1. Runs CodeRabbit static analysis
+2. Auto-implements eligible findings before LLM review
+3. Commits the changes
+4. Runs LLM agents on the updated code
+
+This eliminates the need for LLM agents to assess each audit finding, saving 30-50% of tokens while ensuring static analysis issues are addressed.
+
+Configuration example:
+
+```json
+{
+  "audit_tools": [{
+    "id": "coderabbit",
+    "enabled": true,
+    "auto_implement": {
+      "enabled": true,
+      "min_severity": "minor",
+      "only_refactor_suggestions": false
+    }
+  }]
+}
+```
+
+### 10.4. Optimized Data Transmission
+
+- **Reduced git diff context**: Uses `--unified=1` instead of `--unified=3` (agents can read full files if needed)
+- **Compacted audit findings**: Sends only essential fields (id, file, summary, severity) instead of full objects
+- **Compacted peer review findings**: Excludes internal tracking fields when transmitting findings between phases
+
+### 10.5. Token Usage Tracking
+
+The session tracks comprehensive token usage metrics:
+
+```json
+{
+  "token_usage": {
+    "total_input_tokens": 55000,
+    "total_output_tokens": 3500,
+    "total_input_bytes": 220000,
+    "total_output_bytes": 14000,
+    "by_phase": {
+      "review": { "input_tokens": 50000, "output_tokens": 2500, "call_count": 2 },
+      "peer_review": { "input_tokens": 2500, "output_tokens": 500, "call_count": 2 },
+      "implement": { "input_tokens": 1250, "output_tokens": 400, "call_count": 1 },
+      "audit_auto_implement": { "input_tokens": 1250, "output_tokens": 100, "call_count": 1 }
+    }
+  }
+}
+```
+
+Token usage is displayed in the CLI at review completion:
+
+```
+===============================================================================
+Token Usage Summary
+===============================================================================
+
+Total Input:  55,000 tokens (220.0KB)
+Total Output: 3,500 tokens (14.0KB)
+Total Tokens: 58,500
+
+By Phase:
+  review                50,000 (85.5%) × 2
+  peer_review           5,000 (8.5%) × 2
+  implement             1,800 (3.1%) × 1
+  audit_auto_implement  1,700 (2.9%) × 1
+```
+
+### 10.6. Expected Savings
+
+For a typical 2-agent review of 50 files with 20KB diff and 150KB docs:
+
+- **Before optimizations**: ~567KB input tokens
+- **After optimizations**: ~140KB input tokens
+- **Reduction**: 75% (varies by repository structure and change size)
+
+Additional optimizations (symbol-aware docs, audit deduplication) can push reduction to 80-90% depending on documentation structure and audit tool overlap.
+
+See [review_token_optimization.md](../review_token_optimization.md) for implementation details and [token-optimization-best-practices.md](../token-optimization-best-practices.md) for general principles applicable to other CLI tools.
 
 ---
 
-## 10. Reporting: `.roboreviewer/runtime/ROBOREVIEWER_SUMMARY.md`
+## 11. Reporting: `.roboreviewer/runtime/session.json`
 
-This document is updated every iteration and serves as the session's human-readable source of truth.
+This file is updated every iteration and serves as the runtime source of truth for resume behavior.
 
-- **Unresolved Conflicts:** Queued items awaiting human decisions
-- **Consensus Fixes:** Changes implemented based on reviewer consensus
-- **Review Log:** Summary of reviewer findings and their resolution status
-- **Session Stats:** Basic execution metadata for the session
+In this repository build:
 
----
-
-## 11. Future Extensions
-
-See [`docs/future_phase/deferred-scope.md`](/Users/kirinmurphy/projects/prototypin/consensus_reviewers/docs/future_phase/deferred-scope.md) for deferred capabilities beyond the first iteration.
+- audit runs are recorded separately from reviewer findings
+- individual audit items are persisted even when not adopted
+- summary output includes not-adopted audit items for traceability
 
 ---
 
-## 12. Glossary
+## 12. Future Extensions
+
+See [deferred-scope.md](/Users/kirinmurphy/projects/prototypin/roboreviewer/docs/spec/future_phase/deferred-scope.md) for deferred capabilities beyond the first iteration.
+
+---
+
+## 13. Glossary
 
 ### Roles and Agents
 
@@ -358,16 +500,15 @@ See [`docs/future_phase/deferred-scope.md`](/Users/kirinmurphy/projects/prototyp
 
 ### State and Outputs
 
-| Term                        | Definition                                                                          |
-| --------------------------- | ----------------------------------------------------------------------------------- |
-| **Session State**           | Persisted runtime state stored in `.roboreviewer/runtime/session.json`.             |
-| **Cursor**                  | Pointer indicating the current phase and next pending item in a resumable workflow. |
-| **ROBOREVIEWER_SUMMARY.md** | Human-readable runtime report stored in `.roboreviewer/runtime/`.                   |
-| **Review Log**              | Summary of reviewer findings plus their resolution status.                          |
+| Term              | Definition                                                                          |
+| ----------------- | ----------------------------------------------------------------------------------- |
+| **Session State** | Persisted runtime state stored in `.roboreviewer/runtime/session.json`.             |
+| **Cursor**        | Pointer indicating the current phase and next pending item in a resumable workflow. |
+| **Review Log**    | Summary of reviewer findings plus their resolution status.                          |
 
 ---
 
-## 13. Appendix
+## 14. Appendix
 
 ### 13.1 Detailed Workflow Sequence
 
@@ -399,7 +540,7 @@ sequenceDiagram
     O-->>U: Write summary and queue non-consensus items
 
     opt Non-consensus items exist
-        U->>O: roboreviewer resolve
+        U->>O: roboreviewer resume
         O-->>U: Present queued conflicts one by one
         U->>O: Implement or discard each disputed recommendation
         O->>D: Final director-only implementation turn

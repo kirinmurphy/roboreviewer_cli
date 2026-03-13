@@ -37,7 +37,7 @@ export async function createMockWorkflowRepo({ autoUpdate = true }: { autoUpdate
     path.join(tempDir, ".roboreviewer", "config.json"),
     `${JSON.stringify(
       {
-        schema_version: 2,
+        schema_version: 1,
         autoUpdate,
         agents: {
           director: { tool: AGENT_TOOLS.MOCK },
@@ -45,7 +45,6 @@ export async function createMockWorkflowRepo({ autoUpdate = true }: { autoUpdate
         },
         audit_tools: [{ id: AUDIT_TOOLS.CODERABBIT, enabled: false }],
         context: { docs_path: "", max_docs_bytes: 200000 },
-        runtime: { deterministic: true, max_retries: 3 },
       },
       null,
       2,

@@ -2,6 +2,7 @@ import { SESSION_PATH } from "../../constants.ts";
 import { INTERNAL_CONFIG } from "../../internal-config.ts";
 import {
   formatAuditFindingDisplayId,
+  formatAuditIndicatorBadge,
   formatAuditSeverityBadge,
   formatBadge,
   formatLabel,
@@ -68,7 +69,9 @@ export function renderNotAdoptedAuditFindings({ session }: { session: any }) {
     lines.push(
       finding.severity
         ? `${displayId} ${formatAuditSeverityBadge({ severity: finding.severity })}`
-        : displayId,
+        : finding.indicator_type
+          ? `${displayId} ${formatAuditIndicatorBadge({ indicatorType: finding.indicator_type })}`
+          : displayId,
     );
     lines.push(`${finding.summary}`);
     if (finding.not_adopted_reason) {

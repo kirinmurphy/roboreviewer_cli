@@ -30,14 +30,15 @@ export function createCodexAdapter() {
       return message.includes("timeout") ? "retryable" : "terminal";
     },
     async execute(request) {
+      const promptText = buildPrompt(request);
       const result = await runCodexRequest(request);
       if (request.type === REQUEST_TYPES.PUSHBACK_RESPONSE) {
-        return createPushbackResponse(result);
+        return createPushbackResponse(result, promptText);
       }
       if (request.type === REQUEST_TYPES.IMPLEMENT) {
-        return createImplementationResponse(result);
+        return createImplementationResponse(result, promptText);
       }
-      return createReviewResponse(result);
+      return createReviewResponse(result, promptText);
     },
   };
 }
@@ -147,10 +148,9 @@ function buildPrompt(request) {
       "Review only the provided diff and optional context.",
       "Return findings only for concrete issues worth fixing in this review window.",
       buildReviewFocusSection(),
-      "For every provided audit finding, return an audit_assessments entry with disposition adopt or reject and a concise reason.",
-      "If you adopt an audit finding, also emit a normal finding that references its audit_finding_id in related_audit_ids.",
+      "Audit findings provided have been pre-filtered. You may reference them in related_audit_ids if your findings relate to them.",
+      "If a finding validates or builds upon an audit tool finding, include the matching audit ID in related_audit_ids.",
       "Use repository-relative file paths.",
-      "If a finding is based on audit tool output, include the matching audit ID in related_audit_ids.",
       ...buildCommonPromptSections(request),
     ].join("\n");
   }
@@ -158,8 +158,10 @@ function buildPrompt(request) {
   if (request.type === REQUEST_TYPES.PEER_REVIEW) {
     return [
       "You are Roboreviewer performing peer review of another agent's findings.",
+      "You have read-only file access. Read files mentioned in findings to verify their validity.",
       "For each finding, either agree or push back.",
       "Push back only when the finding is incorrect, out of scope, or too weak to justify action.",
+      "If a finding has potential_duplicate_of field, consider whether it's redundant with the referenced finding.",
       ...buildCommonPromptSections(request),
     ].join("\n");
   }
@@ -167,6 +169,7 @@ function buildPrompt(request) {
   if (request.type === REQUEST_TYPES.PUSHBACK_RESPONSE) {
     return [
       "You are Roboreviewer responding to peer pushback on your findings.",
+      "You have read-only file access. Re-examine code if needed to address pushback accurately.",
       "For each pushed-back finding, decide whether to withdraw it.",
       "Withdraw only if the pushback is correct or the finding should not block the change.",
       "",

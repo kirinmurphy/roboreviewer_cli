@@ -9,7 +9,7 @@ import {
   REVIEW_IMPLEMENTATION_MODE_LABELS,
 } from "../../lib/constants.ts";
 import { ensureDir, pathExists } from "../../lib/system/fs.ts";
-import { type Prompter, withPrompter } from "../../lib/system/interactive.ts";
+import { withPrompter } from "../../lib/system/interactive.ts";
 import {
   renderInitBanner,
   renderInitConfirmation,
@@ -23,6 +23,7 @@ import {
   remindAboutAuthentication,
   updateGitignore,
 } from "./helper-functions.ts";
+import { addQuestionSpacing } from "./addQuestionSpacing.ts";
 import {
   chooseAgentTool,
   chooseDefaultDirector,
@@ -170,24 +171,4 @@ export async function runInitCommand() {
       }),
     );
   });
-}
-
-function addQuestionSpacing({ prompt }: { prompt: Prompter }): Prompter {
-  return {
-    async ask(message, defaultValue) {
-      process.stdout.write("\n");
-      return prompt.ask(message, defaultValue);
-    },
-    async confirm(message, defaultYes) {
-      process.stdout.write("\n");
-      return prompt.confirm(message, defaultYes);
-    },
-    async choose(message, options, defaultIndex) {
-      process.stdout.write("\n");
-      return prompt.choose(message, options, defaultIndex);
-    },
-    close() {
-      return prompt.close();
-    },
-  };
 }

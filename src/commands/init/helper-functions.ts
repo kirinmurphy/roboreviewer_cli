@@ -1,12 +1,13 @@
 import path from "node:path";
 import fs from "node:fs/promises";
+import { INTERNAL_CONFIG } from "../../lib/internal-config.ts";
 import { renderInitWarning } from "../../lib/output/init-output.ts";
 import { getAgentToolSetup, getAuditToolSetup, inspectToolAvailability } from "../../lib/tooling.ts";
 
 export async function promptForDocsPath({ cwd, prompt, pathExists }) {
   const defaultDocsPath = (await pathExists(path.join(cwd, "docs"))) ? "docs" : "";
   const useDocs = await prompt.confirm(
-    "Do you have a docs folder to provide global context for the reviewers?",
+    INTERNAL_CONFIG.cli.init.docsPrompt,
     Boolean(defaultDocsPath),
   );
 
@@ -16,11 +17,11 @@ export async function promptForDocsPath({ cwd, prompt, pathExists }) {
 
   while (true) {
     const docsPath = await prompt.ask(
-      "Docs path",
+      "Docs file or folder path",
       defaultDocsPath,
     );
     if (!docsPath) {
-      process.stdout.write(renderInitWarning({ message: "Docs path cannot be blank while docs context is enabled." }));
+      process.stdout.write(renderInitWarning({ message: "Docs file or folder path cannot be blank while docs context is enabled." }));
       continue;
     }
 
@@ -29,7 +30,7 @@ export async function promptForDocsPath({ cwd, prompt, pathExists }) {
       return docsPath;
     }
 
-    process.stdout.write(renderInitWarning({ message: `Docs path does not exist: ${docsPath}` }));
+    process.stdout.write(renderInitWarning({ message: `Docs file or folder path does not exist: ${docsPath}` }));
   }
 }
 

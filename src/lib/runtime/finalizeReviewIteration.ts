@@ -13,11 +13,10 @@ export async function finalizeReviewIteration({
   session,
   reviewers,
   finalizedIterationFindings,
-  docsText,
   scanIteration,
   includeWorktree,
-  auditRuns,
-  initial,
+  auditRunCount,
+  reviewerFindingsCount,
   onProgress,
   onCheckpoint,
 }) {
@@ -46,8 +45,8 @@ export async function finalizeReviewIteration({
     cwd,
     director: reviewers[0],
     findings: implementationReady,
-    docsText,
     baseRef: "HEAD",
+    session,
   });
   emitProgress({
     onProgress,
@@ -73,11 +72,11 @@ export async function finalizeReviewIteration({
   });
   session.iterations.push({
     iteration_num: scanIteration,
-    reviewer_findings_count: initial.rawFindingCount,
+    reviewer_findings_count: reviewerFindingsCount,
     new_findings_count: implementedFindings.length,
     consensus_count: implementedFindings.filter((finding) => finding.roboreview_outcome === ROBOVIEW_OUTCOMES.CONSENSUS).length,
     non_consensus_count: implementedFindings.filter((finding) => finding.roboreview_outcome === ROBOVIEW_OUTCOMES.NON_CONSENSUS).length,
-    audit_run_count: auditRuns.length,
+    audit_run_count: auditRunCount,
     include_worktree: includeWorktree,
   });
   session.implementation_runs.push(createImplementationRun({ phase: WORKFLOW_PHASES.REVIEW, implementation }));

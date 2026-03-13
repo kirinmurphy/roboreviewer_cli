@@ -155,10 +155,10 @@ export function createMockAdapter(toolId) {
             stance: isLowSeverityStyle ? REVIEW_STANCES.PUSHBACK : REVIEW_STANCES.AGREE,
             note: isLowSeverityStyle
               ? "This looks cosmetic enough to skip unless it blocks the change."
-              : "This issue is actionable and should be fixed in the same run.",
+            : "This issue is actionable and should be fixed in the same run.",
           };
         });
-        return createReviewResponse({ findings: [], comments });
+        return createReviewResponse({ findings: [], audit_assessments: [], comments });
       }
 
       if (request.type === REQUEST_TYPES.PUSHBACK_RESPONSE) {

@@ -7,6 +7,7 @@ import { execFile } from "node:child_process";
 import { createFixtureRepo, git } from "../src/lib/fixtures.ts";
 import { findingId } from "../src/lib/ids.ts";
 import { collectReviewerFindings } from "../src/lib/runtime/workflow/collectReviewerFindings.ts";
+import { runPeerReview } from "../src/lib/runtime/workflow/runPeerReview.ts";
 import { resolveReviewTarget } from "../src/lib/system/git.ts";
 
 const execFileAsync = promisify(execFile);
@@ -127,4 +128,51 @@ test("resolveReviewTarget preserves tabs in commit subjects", async () => {
   });
 
   assert.equal(reviewTarget.commitMessages[0]?.subject, "subject\twith\ttabs");
+});
+
+test("runPeerReview rejects incomplete peer review coverage", async () => {
+  await assert.rejects(
+    runPeerReview({
+      cwd: process.cwd(),
+      reviewers: [
+        {
+          reviewer_id: "reviewer-1",
+          tool: "codex",
+          adapter: {
+            execute: async () => ({ comments: [] }),
+          },
+        },
+        {
+          reviewer_id: "reviewer-2",
+          tool: "claude-code",
+          adapter: {
+            execute: async ({ reviewerId, findings }) => ({
+              comments: findings.map((finding) => ({
+                finding_id: finding.finding_id,
+                stance: "agree",
+                note: `${reviewerId} reviewed ${finding.finding_id}`,
+              })),
+            }),
+          },
+        },
+      ],
+      findings: [
+        {
+          finding_id: "f-1001-codex",
+          source_reviewer_id: "reviewer-1",
+          source_reviewer_tool: "codex",
+          peer_reviews: [],
+        },
+        {
+          finding_id: "f-1002-claude-code",
+          source_reviewer_id: "reviewer-2",
+          source_reviewer_tool: "claude-code",
+          peer_reviews: [],
+        },
+      ],
+      diffText: "",
+      onProgress: () => {},
+    }),
+    /codex returned 0 peer review comment\(s\) for 1 finding\(s\)\./,
+  );
 });

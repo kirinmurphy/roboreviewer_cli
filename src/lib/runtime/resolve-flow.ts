@@ -1,4 +1,9 @@
 import { CONFLICT_STATUSES, CURSOR_PHASES, HUMAN_DECISIONS } from "../constants.ts";
+import {
+  formatConflictHeader,
+  formatLabel,
+  formatLocation,
+} from "../output/review-output/helper-functions.ts";
 
 export const RESOLUTION_OPTION_LABELS = {
   IMPLEMENT: "Implement Disputed Recommendation",
@@ -24,10 +29,30 @@ export function formatConflictPrompt({
   fallbackId: string;
   finding: any;
 }) {
-  return (
-    `\n[Conflict ${index + 1}/${total}] ${finding?.summary ?? fallbackId}\n` +
-    `Location: ${finding?.location?.file ?? "unknown"}:${finding?.location?.line ?? "?"}\n`
-  );
+  const displayFinding = finding ?? {
+    finding_id: fallbackId,
+    location: null,
+    summary: fallbackId,
+    recommendation: null,
+  };
+  const lines = [
+    "",
+    formatConflictHeader({
+      index,
+      total,
+      findingId: displayFinding.finding_id ?? fallbackId,
+    }),
+    formatLocation({ finding: displayFinding }),
+    displayFinding.summary ?? fallbackId,
+  ];
+
+  if (displayFinding.recommendation) {
+    lines.push(
+      `${formatLabel({ label: "Recommendation" })} ${displayFinding.recommendation}`,
+    );
+  }
+
+  return `${lines.join("\n")}\n`;
 }
 
 export function mapResolutionDecision({ decision }: { decision: string }) {

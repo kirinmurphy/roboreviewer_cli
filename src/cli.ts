@@ -1,5 +1,4 @@
 import { runInitCommand } from "./commands/init/index.ts";
-import { runResolveCommand } from "./commands/resolve.ts";
 import { runResumeCommand } from "./commands/resume.ts";
 import { runReviewCommand } from "./commands/review/index.ts";
 import { CLI_COMMANDS } from "./lib/constants.ts";
@@ -22,11 +21,6 @@ export async function runCli(argv) {
     return;
   }
 
-  if (command === CLI_COMMANDS.RESOLVE) {
-    await runResolveCommand();
-    return;
-  }
-
   if (command === CLI_COMMANDS.RESUME) {
     await runResumeCommand();
     return;
@@ -39,9 +33,8 @@ function formatHelp() {
   return [
     "Usage:",
     `  roboreviewer ${CLI_COMMANDS.INIT}`,
-    `  roboreviewer ${CLI_COMMANDS.REVIEW} <commit-ish> [--docs <path>] [--verbose]`,
-    `  roboreviewer ${CLI_COMMANDS.REVIEW} --last [--docs <path>] [--verbose]`,
-    `  roboreviewer ${CLI_COMMANDS.RESOLVE}`,
+    `  roboreviewer ${CLI_COMMANDS.REVIEW} <commit-ish> [--docs <file-or-folder>] [--verbose]`,
+    `  roboreviewer ${CLI_COMMANDS.REVIEW} --last [--docs <file-or-folder>] [--verbose]`,
     `  roboreviewer ${CLI_COMMANDS.RESUME}`,
   ].join("\n");
 }

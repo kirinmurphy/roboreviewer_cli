@@ -4,7 +4,7 @@ import { listChangedFiles } from "../../system/git.ts";
 import { applyConflictResolutionDecisions, createImplementationRun, markImplementedFindings, resolveConflicts, WORKFLOW_PHASES } from "../workflow-state/index.ts";
 import { runImplementation } from "./helper-functions.ts";
 
-export async function finalizeResolvedConflicts({ cwd, config, session, docsText }) {
+export async function finalizeResolvedConflicts({ cwd, config, session }) {
   const director = createAdapter(config.agents.director.tool);
   await director.healthcheck();
 
@@ -17,8 +17,8 @@ export async function finalizeResolvedConflicts({ cwd, config, session, docsText
     cwd,
     director: { adapter: director },
     findings: implementFindings,
-    docsText,
     baseRef: "HEAD",
+    session,
   });
 
   session.findings = markImplementedFindings({

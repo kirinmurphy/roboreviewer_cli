@@ -1,0 +1,15 @@
+manually test
+
+- test when agents or coderabbit not installed yet
+- test if auth check answer is no
+- test what mock does
+- confirm agents start with a clean context every review
+- test resume behavior 
+  - resumes at the right place  
+  - session.json updates appropriately 
+- test what happens to the runtime artifacts if we run multiple reviews in the repo 
+
+
+TODO
+- how do we persist user decisions from previous sessions to reinforce decisions made in subsequent reviews?  If the user previously decided on doing something / not doing something, we want to be able to retain that decsion for future scans so the user doesn't have to remeneber what they did. 
+- make a config.local.json vs. config.json so global properties can be overwritten by local configs.  

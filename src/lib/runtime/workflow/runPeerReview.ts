@@ -1,7 +1,8 @@
 import { DECIDED_BY, FINDING_STATUSES, REQUEST_TYPES, RESOLUTION_STATUSES, REVIEW_STANCES, ROBOVIEW_OUTCOMES } from "../../constants.ts";
 import { emitProgress } from "./helper-functions.ts";
+import { trackTokenUsage } from "../track-token-usage.ts";
 
-export async function runPeerReview({ cwd, reviewers, findings, diffText, onProgress }) {
+export async function runPeerReview({ cwd, reviewers, findings, session, onProgress }) {
   if (reviewers.length < 2) {
     emitProgress({
       onProgress,
@@ -15,8 +16,8 @@ export async function runPeerReview({ cwd, reviewers, findings, diffText, onProg
   }
 
   const findingsByReviewer = groupFindingsByReviewer(findings);
-  await applyPeerReviewComments({ cwd, reviewers, findings, diffText, onProgress });
-  await applyPushbackResolutions({ cwd, reviewers, findings, findingsByReviewer, diffText, onProgress });
+  await applyPeerReviewComments({ cwd, reviewers, findings, session, onProgress });
+  await applyPushbackResolutions({ cwd, reviewers, findings, findingsByReviewer, session, onProgress });
 
   return findings.map((finding) => {
     const hasPushback = finding.peer_reviews.some((review) => review.stance === REVIEW_STANCES.PUSHBACK);
@@ -53,7 +54,7 @@ function groupFindingsByReviewer(findings) {
   return findingsByReviewer;
 }
 
-async function applyPeerReviewComments({ cwd, reviewers, findings, diffText, onProgress }) {
+async function applyPeerReviewComments({ cwd, reviewers, findings, session, onProgress }) {
   for (const reviewer of reviewers) {
     const peerFindings = findings.filter((finding) => finding.source_reviewer_id !== reviewer.reviewer_id);
     emitProgress({
@@ -70,9 +71,23 @@ async function applyPeerReviewComments({ cwd, reviewers, findings, diffText, onP
         cwd,
         reviewerId: reviewer.reviewer_id,
         findings: peerFindings,
-        diffText,
+        // diffText removed - peer review focuses on findings, not re-analyzing code
       });
 
+      // Track token usage for peer review
+      if (session && result.usage) {
+        trackTokenUsage({
+          session,
+          phase: "peer_review",
+          usage: result.usage,
+        });
+      }
+
+      validatePeerReviewComments({
+        reviewer,
+        comments: result.comments,
+        peerFindings,
+      });
       return { reviewer, comments: result.comments };
     }),
   );
@@ -103,7 +118,24 @@ async function applyPeerReviewComments({ cwd, reviewers, findings, diffText, onP
   }
 }
 
-async function applyPushbackResolutions({ cwd, reviewers, findings, findingsByReviewer, diffText, onProgress }) {
+function validatePeerReviewComments({ reviewer, comments, peerFindings }) {
+  const expectedFindingIds = new Set(peerFindings.map((finding) => finding.finding_id));
+  const commentFindingIds = new Set((comments ?? []).map((comment) => comment.finding_id));
+
+  if (expectedFindingIds.size !== commentFindingIds.size) {
+    throw new Error(
+      `${reviewer.tool} returned ${commentFindingIds.size} peer review comment(s) for ${expectedFindingIds.size} finding(s).`,
+    );
+  }
+
+  for (const findingId of expectedFindingIds) {
+    if (!commentFindingIds.has(findingId)) {
+      throw new Error(`${reviewer.tool} did not review finding ${findingId}.`);
+    }
+  }
+}
+
+async function applyPushbackResolutions({ cwd, reviewers, findings, findingsByReviewer, session, onProgress }) {
   const reviewersWithPushback = [];
 
   for (const reviewer of reviewers) {
@@ -129,8 +161,17 @@ async function applyPushbackResolutions({ cwd, reviewers, findings, findingsByRe
         cwd,
         reviewerId: reviewer.reviewer_id,
         findings: pushedBack,
-        diffText,
+        // diffText removed - pushback response only needs finding context
       });
+
+      // Track token usage for pushback response
+      if (session && result.usage) {
+        trackTokenUsage({
+          session,
+          phase: "pushback_response",
+          usage: result.usage,
+        });
+      }
 
       return { reviewer, responses: result.comments };
     }),

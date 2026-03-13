@@ -1,6 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { createClaudeAdapter, sanitizeClaudeErrorMessage } from "../src/lib/adapters/claude.ts";
+import { createReviewResponse } from "../src/lib/adapters/shared.ts";
 
 test("claude adapter module loads with parser support for fenced JSON responses", async () => {
   const adapter = createClaudeAdapter();
@@ -24,5 +25,12 @@ test("sanitizeClaudeErrorMessage strips prompt dumps and keeps the actionable Cl
   assert.equal(
     message,
     "Claude implement request failed: Input must be provided either through stdin or as a prompt argument when using --print",
+  );
+});
+
+test("createReviewResponse rejects malformed structured review payloads", () => {
+  assert.throws(
+    () => createReviewResponse({ findings: [] }),
+    /missing required array field: audit_assessments/i,
   );
 });

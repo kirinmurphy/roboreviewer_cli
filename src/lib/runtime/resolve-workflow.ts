@@ -1,8 +1,8 @@
 import { CONFLICT_STATUSES, CURSOR_PHASES, HUMAN_DECISION_LABELS } from "../constants.ts";
 import { loadDocumentationContext } from "../docs.ts";
+import { formatConfirmPrompt } from "../output/review-output/helper-functions.ts";
 import { type Prompter, withPrompter } from "../system/interactive.ts";
-import { buildSummary } from "./summary.ts";
-import { saveSession, saveSessionSummary } from "./session.ts";
+import { saveSession } from "./session.ts";
 import { finalizeResolvedConflicts } from "./workflow/finalizeResolvedConflicts.ts";
 import { formatConflictPrompt, hasPendingConflict, isResolvedConflict, mapResolutionDecision } from "./resolve-flow.ts";
 
@@ -17,20 +17,18 @@ export async function runResolveWorkflow({ cwd, config, session, prompt }: { cwd
 
   if (session.cursor.phase === CURSOR_PHASES.HITL_RESOLUTION) {
     await collectConflictDecisions({ cwd, session, prompt });
-    session.cursor = { phase: CURSOR_PHASES.FINAL_IMPLEMENTATION, next_conflict_index: session.conflicts.length };
+    session.cursor = {
+      ...session.cursor,
+      phase: CURSOR_PHASES.FINAL_IMPLEMENTATION,
+      next_conflict_index: session.conflicts.length,
+    };
     await persistSession({ cwd, session });
   }
 
-  const docsContext = await loadDocumentationContext({
-    cwd,
-    docsPath: config.context.docs_path,
-    maxDocsBytes: config.context.max_docs_bytes,
-  });
   const updatedSession = await finalizeResolvedConflicts({
     cwd,
     config,
     session,
-    docsText: docsContext.docsText,
   });
 
   await persistSession({ cwd, session: updatedSession });
@@ -58,7 +56,7 @@ export async function collectConflictDecisions({ cwd, session, prompt }: { cwd: 
       );
 
       const decision = await activePrompt.choose(
-        "Decision",
+        formatConfirmPrompt({ message: "Decision" }),
         [
           HUMAN_DECISION_LABELS.IMPLEMENT_DISPUTED_RECOMMENDATION,
           HUMAN_DECISION_LABELS.DISCARD_DISPUTED_RECOMMENDATION,
@@ -82,5 +80,4 @@ export async function collectConflictDecisions({ cwd, session, prompt }: { cwd: 
 
 async function persistSession({ cwd, session }) {
   await saveSession({ cwd, session });
-  await saveSessionSummary({ cwd, session, summary: buildSummary(session) });
 }

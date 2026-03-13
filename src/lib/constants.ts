@@ -1,11 +1,10 @@
 import path from "node:path";
 
-export const SCHEMA_VERSION = 2;
+export const SCHEMA_VERSION = 1;
 export const CONFIG_DIR = ".roboreviewer";
 export const RUNTIME_DIR = path.join(CONFIG_DIR, "runtime");
 export const CONFIG_PATH = path.join(CONFIG_DIR, "config.json");
 export const SESSION_PATH = path.join(RUNTIME_DIR, "session.json");
-export const SUMMARY_PATH = path.join(RUNTIME_DIR, "ROBOREVIEWER_SUMMARY.md");
 export const HISTORY_DIR = path.join(RUNTIME_DIR, "history");
 export const TMP_DIR = path.join(RUNTIME_DIR, "tmp");
 export const DEFAULT_MAX_DOCS_BYTES = 200000;
@@ -26,7 +25,6 @@ export const AUDIT_TOOLS = {
 export const CLI_COMMANDS = {
   INIT: "init",
   REVIEW: "review",
-  RESOLVE: "resolve",
   RESUME: "resume",
 } as const;
 
@@ -45,13 +43,11 @@ export const REVIEW_IMPLEMENTATION_MODE_LABELS = {
 } as const;
 
 export const POST_REVIEW_ACTIONS = {
-  RESOLVE: "resolve",
   REPEAT_SCAN: "repeat_scan",
   END_SCAN: "end_scan",
 } as const;
 
 export const POST_REVIEW_ACTION_LABELS = {
-  RESOLVE: "Address Non-Consensus Findings",
   REPEAT_SCAN: "Scan the code again to look for additional issues",
   END_SCAN: "End Scan",
 } as const;
@@ -82,6 +78,7 @@ export const SESSION_STATUSES = {
 } as const;
 
 export const CURSOR_PHASES = {
+  MANUAL_CONSENSUS_APPROVAL: "manual_consensus_approval",
   HITL_RESOLUTION: "hitl_resolution",
   FINAL_IMPLEMENTATION: "final_implementation",
 } as const;

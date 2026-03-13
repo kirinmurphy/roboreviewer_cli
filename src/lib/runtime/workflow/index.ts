@@ -1,33 +1,17 @@
 import {
-  CONFLICT_STATUSES,
-  CURSOR_PHASES,
   FINDING_STATUSES,
-  REVIEWER_IDS,
-  REVIEWER_ROLES,
   ROBOVIEW_OUTCOMES,
-  SESSION_STATUSES,
 } from "../../constants.ts";
-import { createAdapter } from "../../adapters/index.ts";
-import { listReviewScopeFiles } from "../../system/git.ts";
 import { collectReviewerFindings } from "./collectReviewerFindings.ts";
 import { finalizeReviewIteration } from "../finalizeReviewIteration.ts";
 import { runPeerReview } from "./runPeerReview.ts";
-import {
-  applyConflictResolutionDecisions,
-  applyConsensusApprovalDecisions,
-  buildTrackedAuditFindings,
-  createConflicts,
-  getNextPendingConflictIndex,
-  resolveConflicts,
-} from "../workflow-state/index.ts";
-import { checkpointSession, emitProgress, replaceFindings, verifyReviewers } from "./helper-functions.ts";
-
-type WorkflowReviewer = {
-  reviewer_id: string;
-  tool: string;
-  adapter: ReturnType<typeof createAdapter>;
-  role: string;
-};
+import { verifyReviewers } from "./helper-functions.ts";
+import { buildReviewers } from "./buildReviewers.ts";
+import { advanceReviewState } from "./advanceReviewState.ts";
+import { applyAuditFixes } from "./applyAuditFixes.ts";
+import { buildWorkspaceUnifiedDiff } from "../../system/git.ts";
+import { redactText } from "../../redaction.ts";
+export { buildReviewers } from "./buildReviewers.ts";
 
 export async function runReviewWorkflow({
   cwd,
@@ -39,7 +23,10 @@ export async function runReviewWorkflow({
   commitMessages,
   scanIteration,
   includeWorktree,
+  docsPath,
+  diffBase,
   onApproveImplementationReady,
+  onApproveAuditFixes,
   onResolveConflicts,
   onProgress,
   onCheckpoint,
@@ -53,7 +40,10 @@ export async function runReviewWorkflow({
   commitMessages: any[];
   scanIteration: number;
   includeWorktree: boolean;
+  docsPath: string | null;
+  diffBase: string;
   onApproveImplementationReady?: ((args: { findings: any[] }) => Promise<Map<string, boolean>>) | null;
+  onApproveAuditFixes?: ((args: { findings: any[] }) => Promise<Map<string, boolean>>) | null;
   onResolveConflicts?: ((args: { session: any; conflicts: any[] }) => Promise<void>) | null;
   onProgress?: (event: unknown) => void;
   onCheckpoint?: (args: { session: any }) => Promise<void>;
@@ -61,22 +51,65 @@ export async function runReviewWorkflow({
   const reviewers = buildReviewers(config);
   await verifyReviewers({ reviewers, onProgress });
 
+  // Apply audit fixes first (CodeRabbit-first workflow)
+  const auditFixesResult = await applyAuditFixes({
+    cwd,
+    director: reviewers[0],
+    auditRuns,
+    auditToolConfigs: config.audit_tools ?? [],
+    scanIteration,
+    session,
+    onProgress,
+    onApproveAuditFixes,
+  });
+
+  // Track auto-implemented audit findings
+  if (auditFixesResult.implemented.length > 0) {
+    session.findings.push(...auditFixesResult.implemented);
+    if (auditFixesResult.implementation) {
+      session.implementation_runs.push({
+        phase: "audit_auto_implement",
+        implementation: auditFixesResult.implementation,
+      });
+    }
+  }
+
+  // Regenerate diff to include audit fixes in working tree
+  // This ensures LLM reviewers see the already-fixed code
+  let reviewDiffText = diffText;
+  if (auditFixesResult.implemented.length > 0 && !includeWorktree) {
+    const updatedDiff = await buildWorkspaceUnifiedDiff({ cwd, diffBase });
+    const redactedUpdatedDiff = redactText(updatedDiff);
+    reviewDiffText = redactedUpdatedDiff.text;
+  }
+
   const initial = await collectReviewerFindings({
     cwd,
     reviewers,
-    diffText,
+    diffText: reviewDiffText,
     docsText,
     auditRuns,
     commitMessages,
     existingFindings: session.findings,
     scanIteration,
+    session,
     onProgress,
+    diffBase,
   });
+  session.reviewer_runs.push(
+    ...initial.reviewerResults.map(({ reviewer, raw, findings }) => ({
+      scan_iteration: scanIteration,
+      reviewer_id: reviewer.reviewer_id,
+      reviewer_tool: reviewer.tool,
+      finding_count: findings.length,
+      raw,
+    })),
+  );
   const findingsAfterPeerReview = await runPeerReview({
     cwd,
     reviewers,
     findings: initial.findings,
-    diffText,
+    session,
     onProgress,
   });
   const findingsWithOutcomes = findingsAfterPeerReview.map((finding) =>
@@ -87,102 +120,36 @@ export async function runReviewWorkflow({
         }
       : finding,
   );
-
-  session.audit_findings.push(
-    ...buildTrackedAuditFindings({
-      auditFindings: auditRuns.flatMap((run) => run.findings ?? []),
-      findings: findingsWithOutcomes,
-      auditAssessments: initial.auditAssessments,
-    }),
-  );
-  session.findings.push(...findingsWithOutcomes);
-  session.review_target.changed_files = await listReviewScopeFiles({
+  const reviewState = await advanceReviewState({
     cwd,
-    diffBase: session.review_target.diff_base,
-    includeWorktree,
-  });
-  await checkpointSession({ onCheckpoint, session });
-
-  const consensusDecisions = typeof onApproveImplementationReady === "function"
-    ? await onApproveImplementationReady({ findings: findingsWithOutcomes })
-    : new Map<string, boolean>();
-  let finalizedIterationFindings = applyConsensusApprovalDecisions({
+    config,
+    session,
     findings: findingsWithOutcomes,
-    approvalByFindingId: consensusDecisions,
-    autoUpdate: config.autoUpdate,
+    auditRuns,
+    auditAssessments: initial.auditAssessments,
+    rawFindingCount: initial.rawFindingCount,
+    scanIteration,
+    includeWorktree,
+    docsPath,
+    onApproveImplementationReady,
+    onResolveConflicts,
+    onProgress,
+    onCheckpoint,
   });
-  session.findings = replaceFindings({
-    existingFindings: session.findings,
-    nextFindings: finalizedIterationFindings,
-  });
-  await checkpointSession({ onCheckpoint, session });
-
-  const conflicts = createConflicts({
-    findings: finalizedIterationFindings,
-    startIndex: session.conflicts.length,
-  });
-  session.conflicts.push(...conflicts);
-  if (conflicts.length > 0) {
-    session.cursor = { phase: CURSOR_PHASES.HITL_RESOLUTION, next_conflict_index: getNextPendingConflictIndex(session.conflicts) };
-    session.status = SESSION_STATUSES.PAUSED;
-    await checkpointSession({ onCheckpoint, session });
-
-    if (typeof onResolveConflicts !== "function") {
-      emitProgress({
-        onProgress,
-        message: `Review paused with ${conflicts.length} conflict(s) awaiting user resolution`,
-      });
-      return session;
-    }
-
-    await onResolveConflicts({ session, conflicts });
-    finalizedIterationFindings = applyConflictResolutionDecisions({
-      findings: finalizedIterationFindings,
-      conflicts,
-    });
-    session.findings = replaceFindings({
-      existingFindings: session.findings,
-      nextFindings: finalizedIterationFindings,
-    });
-    session.conflicts = resolveConflicts(session.conflicts);
-    session.cursor = null;
-    session.status = SESSION_STATUSES.RUNNING;
-    await checkpointSession({ onCheckpoint, session });
+  if (reviewState.paused) {
+    return session;
   }
 
   return finalizeReviewIteration({
     cwd,
     session,
     reviewers,
-    finalizedIterationFindings,
-    docsText,
+    finalizedIterationFindings: reviewState.finalizedIterationFindings,
     scanIteration,
     includeWorktree,
-    auditRuns,
-    initial,
+    auditRunCount: auditRuns.length,
+    reviewerFindingsCount: initial.rawFindingCount,
     onProgress,
     onCheckpoint,
   });
-}
-
-function buildReviewers(config): WorkflowReviewer[] {
-  const directorTool = config.agents.director.tool;
-  const reviewers: WorkflowReviewer[] = [
-    {
-      reviewer_id: REVIEWER_IDS.PRIMARY,
-      tool: directorTool,
-      adapter: createAdapter(directorTool),
-      role: REVIEWER_ROLES.DIRECTOR,
-    },
-  ];
-  const secondaryTool = config.agents.reviewers?.[0]?.tool;
-  if (secondaryTool) {
-    reviewers.push({
-      reviewer_id: REVIEWER_IDS.SECONDARY,
-      tool: secondaryTool,
-      adapter: createAdapter(secondaryTool),
-      role: REVIEWER_ROLES.REVIEWER,
-    });
-  }
-  return reviewers;
 }

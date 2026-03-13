@@ -25,7 +25,7 @@ test("review completes the mock workflow", async () => {
   if (sessionAfterReview.status === "paused") {
     await runCommandWithInput({
       command: "node",
-      args: ["--experimental-strip-types", binPath, "resolve"],
+      args: ["--experimental-strip-types", binPath, "resume"],
       cwd: tempDir,
       input: "1\n",
       closeDelayMs: 30000,
@@ -34,16 +34,11 @@ test("review completes the mock workflow", async () => {
 
   const finalSession = JSON.parse(await fs.readFile(path.join(tempDir, ".roboreviewer", "runtime", "session.json"), "utf8"));
   const appJs = await fs.readFile(path.join(tempDir, "app.js"), "utf8");
-  const summary = await fs.readFile(path.join(tempDir, ".roboreviewer", "runtime", "ROBOREVIEWER_SUMMARY.md"), "utf8");
   const historySession = JSON.parse(
     await fs.readFile(
       path.join(tempDir, ".roboreviewer", "runtime", "history", finalSession.session_id, "session.json"),
       "utf8",
     ),
-  );
-  const historySummary = await fs.readFile(
-    path.join(tempDir, ".roboreviewer", "runtime", "history", finalSession.session_id, "ROBOREVIEWER_SUMMARY.md"),
-    "utf8",
   );
 
   assert.equal(finalSession.status, "complete");
@@ -51,6 +46,4 @@ test("review completes the mock workflow", async () => {
   assert.equal(finalSession.conflicts[0].human_decision, "implement_disputed_recommendation");
   assert.match(appJs, /return 1;/);
   assert.doesNotMatch(appJs, /console\.log/);
-  assert.match(summary, /Resolved Disputes/);
-  assert.match(historySummary, /Resolved Disputes/);
 });

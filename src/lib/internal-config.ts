@@ -60,18 +60,21 @@ export const INTERNAL_CONFIG = {
     categories: ["correctness", "security", "style", "performance"],
     severities: ["low", "medium", "high"],
   },
-  summary: {
-    unresolvedConflictsTitle: "## Unresolved Conflicts",
-    resolvedDisputesTitle: "## Resolved Disputes",
-    consensusFixesTitle: "## Consensus Fixes",
-    discardedFindingsTitle: "## Discarded Findings",
-    auditFindingsNotAdoptedTitle: "## Audit Findings Not Adopted",
-    reviewLogTitle: "## Review Log",
-    sessionStatsTitle: "## Session Stats",
-  },
   cli: {
     sectionDividerWidth: 64,
     valueStyles: {
+      stageLabel: {
+        tone: "slate",
+        bold: true,
+      },
+      fieldLabel: {
+        tone: "slate",
+        bold: true,
+      },
+      confirmPrompt: {
+        tone: "teal",
+        bold: true,
+      },
       ids: {
         tone: "green",
         bold: true,
@@ -88,6 +91,10 @@ export const INTERNAL_CONFIG = {
           minor: "blue",
           trivial: "cyan",
         },
+        auditIndicators: {
+          potential_issue: "yellow",
+          refactor_suggestion: "blue",
+        },
       },
     },
     init: {
@@ -98,6 +105,27 @@ export const INTERNAL_CONFIG = {
       repositoryFilesSectionTitle: "Repository Files",
       authSectionTitle: "Authentication Checks",
       readyTitle: "Roboreviewer Is Ready",
+      docsPrompt:
+        "Do you want to add a docs file/folder to provide added context for reviews?\nYou can also add additional docs to an individual review using --docs.",
+      nextStepsTitle: "Next Steps",
+      nextSteps: [
+        {
+          command: "roboreviewer review --last",
+          description: "reviews the last commit",
+        },
+        {
+          command: "roboreviewer review COMMIT_HASH",
+          description: "reviews this and all following commits",
+        },
+        {
+          command: "roboreviewer review --last --docs path_to_doc(s)",
+          description: "reviews with added docs reference",
+        },
+        {
+          command: "roboreviewer --help",
+          description: "will show all available commands",
+        },
+      ],
     },
     review: {
       workflowTitle: "Review Workflow",
@@ -143,5 +171,7 @@ export const INTERNAL_CONFIG = {
   },
 } as const;
 
-export const FINDING_CATEGORY_LIST = INTERNAL_CONFIG.findings.categories.join("|");
-export const FINDING_SEVERITY_LIST = INTERNAL_CONFIG.findings.severities.join("|");
+export const FINDING_CATEGORY_LIST =
+  INTERNAL_CONFIG.findings.categories.join("|");
+export const FINDING_SEVERITY_LIST =
+  INTERNAL_CONFIG.findings.severities.join("|");

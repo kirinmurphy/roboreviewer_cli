@@ -1,21 +1,16 @@
 import {
-  DECIDED_BY,
-  FINDING_STATUSES,
   POST_REVIEW_ACTION_LABELS,
   POST_REVIEW_ACTIONS,
-  RESOLUTION_STATUSES,
 } from "../../lib/constants.ts";
-import { loadDocumentationContext } from "../../lib/docs.ts";
+import { loadFilteredDocumentationContext } from "../../lib/docs.ts";
 import { redactText } from "../../lib/redaction.ts";
 import { runAuditTools } from "../../lib/runtime/audit.ts";
-import { saveSession, saveSessionSummary } from "../../lib/runtime/session.ts";
-import {
-  buildInProgressSummary,
-  buildSummary,
-} from "../../lib/runtime/summary.ts";
+import { collectConsensusApprovalDecisions } from "../../lib/runtime/manual-consensus.ts";
+import { saveSession } from "../../lib/runtime/session.ts";
 import {
   buildUnifiedDiff,
   buildWorkspaceUnifiedDiff,
+  listReviewScopeFiles,
 } from "../../lib/system/git.ts";
 import { type Prompter } from "../../lib/system/interactive.ts";
 
@@ -39,10 +34,18 @@ export async function loadIterationContext({
   const redactedDiff = redactText(diff);
 
   writeEvent("Loading documentation context");
-  const docsContext = await loadDocumentationContext({
+  // Get changed files for smart documentation filtering
+  const changedFiles = await listReviewScopeFiles({
+    cwd,
+    diffBase: reviewTarget.diffBase,
+    includeWorktree,
+  });
+  const docsContext = await loadFilteredDocumentationContext({
     cwd,
     docsPath: docsOverride ?? config.context.docs_path,
     maxDocsBytes: config.context.max_docs_bytes,
+    changedFiles,
+    diffText: redactedDiff.text,
   });
 
   let auditRuns = [];
@@ -68,33 +71,9 @@ export async function loadIterationContext({
 export async function promptForConsensusApprovals({
   cwd,
   session,
-  findings,
   prompt,
 }) {
-  const implementationReady = findings.filter(
-    (finding) => finding.status === FINDING_STATUSES.IMPLEMENTATION_READY,
-  );
-  const approvalByFindingId = new Map<string, boolean>();
-  if (implementationReady.length === 0) {
-    return approvalByFindingId;
-  }
-
-  for (const finding of implementationReady) {
-    process.stdout.write(
-      `\n[Consensus] ${finding.summary}\n` +
-        `Location: ${finding.location?.file ?? "unknown"}:${finding.location?.line ?? "?"}\n` +
-        `Recommendation: ${finding.recommendation}\n`,
-    );
-    const approved = await prompt.confirm(
-      "Approve this consensus update?",
-      true,
-    );
-    approvalByFindingId.set(finding.finding_id, approved);
-    applyApprovalPreview({ session, findingId: finding.finding_id, approved });
-    await persistInProgressSession({ cwd, session });
-  }
-
-  return approvalByFindingId;
+  return collectConsensusApprovalDecisions({ cwd, session, prompt });
 }
 
 export async function choosePostReviewAction({ prompt }: { prompt: Prompter }) {
@@ -110,29 +89,8 @@ export async function choosePostReviewAction({ prompt }: { prompt: Prompter }) {
 
 export async function persistInProgressSession({ cwd, session }) {
   await saveSession({ cwd, session });
-  await saveSessionSummary({
-    cwd,
-    session,
-    summary: buildInProgressSummary(session),
-  });
 }
 
 export async function persistFinalSession({ cwd, session }) {
   await saveSession({ cwd, session });
-  await saveSessionSummary({ cwd, session, summary: buildSummary(session) });
-}
-
-function applyApprovalPreview({ session, findingId, approved }) {
-  session.findings = session.findings.map((finding) => {
-    if (finding.finding_id !== findingId) {
-      return finding;
-    }
-    return {
-      ...finding,
-      user_approved: approved,
-      decided_by: DECIDED_BY.USER,
-      resolution_status: approved ? null : RESOLUTION_STATUSES.DISCARDED,
-      status: approved ? finding.status : FINDING_STATUSES.RESOLVED,
-    };
-  });
 }

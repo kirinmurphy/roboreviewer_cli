@@ -31,14 +31,15 @@ export function createClaudeAdapter() {
       return "terminal";
     },
     async execute(request: any) {
+      const promptText = buildPrompt(request);
       const result = await runClaudeRequest(request);
       if (request.type === REQUEST_TYPES.PUSHBACK_RESPONSE) {
-        return createPushbackResponse(result);
+        return createPushbackResponse(result, promptText);
       }
       if (request.type === REQUEST_TYPES.IMPLEMENT) {
-        return createImplementationResponse(result);
+        return createImplementationResponse(result, promptText);
       }
-      return createReviewResponse(result);
+      return createReviewResponse(result, promptText);
     },
   };
 }
@@ -131,9 +132,8 @@ function buildPrompt(request: any): string {
       "Return only valid JSON and no surrounding commentary.",
       "Use repository-relative file paths.",
       buildReviewFocusSection(),
-      "For every provided audit finding, return an audit_assessments entry with disposition adopt or reject and a concise reason.",
-      "If you adopt an audit finding, also emit a normal finding that references its audit_finding_id in related_audit_ids.",
-      "If a finding is based on audit tool output, include the matching audit ID in related_audit_ids.",
+      "Audit findings provided have been pre-filtered. You may reference them in related_audit_ids if your findings relate to them.",
+      "If a finding validates or builds upon an audit tool finding, include the matching audit ID in related_audit_ids.",
       "",
       `JSON contract:\n${contract}`,
       ...buildCommonPromptSections(request),
@@ -145,6 +145,9 @@ function buildPrompt(request: any): string {
   if (request.type === REQUEST_TYPES.PEER_REVIEW) {
     return [
       "You are Roboreviewer performing peer review of another agent's findings.",
+      "You have read-only file access. Use the Read tool to examine files mentioned in findings to verify their validity.",
+      "For each finding, determine if it's correct and actionable by reading the relevant code.",
+      "If a finding has potential_duplicate_of field, consider whether it's redundant with the referenced finding.",
       "Return only valid JSON and no surrounding commentary.",
       `JSON contract:\n${contract}`,
       ...buildCommonPromptSections(request),
@@ -154,6 +157,7 @@ function buildPrompt(request: any): string {
   if (request.type === REQUEST_TYPES.PUSHBACK_RESPONSE) {
     return [
       "You are Roboreviewer responding to pushback on your findings.",
+      "You have read-only file access. Use the Read tool to re-examine code if needed to address pushback.",
       "Return only valid JSON and no surrounding commentary.",
       `JSON contract:\n${contract}`,
       `Source reviewer id: ${request.reviewerId}`,
@@ -310,6 +314,15 @@ async function runClaudeRequest(request: any): Promise<any> {
     args.push(
       "--allowedTools",
       "Edit,Bash(git:*),Bash(ls:*),Bash(cat:*),Bash(sed:*),Bash(rg:*),Bash(find:*),Bash(node:*)",
+    );
+    args.push("--add-dir", request.cwd);
+  } else if (request.type === REQUEST_TYPES.PEER_REVIEW || request.type === REQUEST_TYPES.PUSHBACK_RESPONSE) {
+    // Peer reviewers need read-only access to verify findings against actual code
+    // They receive findings (not full diff) and read only files they need to verify
+    // This reduces token usage while maintaining review quality
+    args.push(
+      "--allowedTools",
+      "Read,Bash(git:*),Bash(ls:*),Bash(cat:*),Bash(rg:*),Bash(find:*)",
     );
     args.push("--add-dir", request.cwd);
   }

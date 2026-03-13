@@ -55,7 +55,7 @@ export async function resolveReviewTarget({ cwd, selector, useLast }) {
 export async function buildUnifiedDiff({ cwd, reviewTarget }) {
   const result = await runCommand({
     command: "git",
-    args: ["diff", "--find-renames", "--unified=3", reviewTarget.diffBase, "HEAD"],
+    args: ["diff", "--find-renames", "--unified=1", reviewTarget.diffBase, "HEAD"],
     cwd,
   });
   return result.stdout;
@@ -69,7 +69,7 @@ export async function listChangedFiles({ cwd, diffBase = "HEAD" }) {
 export async function buildWorkspaceUnifiedDiff({ cwd, diffBase }) {
   const trackedResult = await runCommand({
     command: "git",
-    args: ["diff", "--find-renames", "--unified=3", diffBase],
+    args: ["diff", "--find-renames", "--unified=1", diffBase],
     cwd,
   });
   const untrackedFiles = await listUntrackedFiles({ cwd });
@@ -78,7 +78,7 @@ export async function buildWorkspaceUnifiedDiff({ cwd, diffBase }) {
   for (const filePath of untrackedFiles) {
     const result = await runCommand({
       command: "git",
-      args: ["diff", "--no-index", "--find-renames", "--unified=3", "--", "/dev/null", filePath],
+      args: ["diff", "--no-index", "--find-renames", "--unified=1", "--", "/dev/null", filePath],
       cwd,
       allowedExitCodes: [1],
     });

@@ -35,6 +35,7 @@ test("repeat scan appends iterations and ignores previously tracked findings", a
     commitMessages: reviewTarget.commitMessages,
     scanIteration: 1,
     includeWorktree: false,
+    docsPath: config.context.docs_path,
     onApproveImplementationReady: async ({ findings }) =>
       new Map(findings.filter((finding) => finding.summary.includes("debugger")).map((finding) => [finding.finding_id, false])),
     onResolveConflicts: async ({ conflicts }) => {
@@ -59,6 +60,7 @@ test("repeat scan appends iterations and ignores previously tracked findings", a
     commitMessages: reviewTarget.commitMessages,
     scanIteration: 2,
     includeWorktree: true,
+    docsPath: config.context.docs_path,
     onApproveImplementationReady: async () => new Map(),
     onResolveConflicts: async ({ conflicts }) => {
       for (const conflict of conflicts) {
@@ -70,6 +72,10 @@ test("repeat scan appends iterations and ignores previously tracked findings", a
 
   assert.equal(secondSession.iterations.length, 2);
   assert.equal(secondSession.findings.length, 2);
+  assert.equal(secondSession.reviewer_runs.length, 4);
+  assert.equal(secondSession.reviewer_runs[0].scan_iteration, 1);
+  assert.equal(secondSession.reviewer_runs[0].reviewer_tool, "mock");
+  assert.match(secondSession.reviewer_runs[0].raw, /"findings":\[/);
   assert.deepEqual(
     secondSession.findings.map((finding) => finding.finding_id),
     ["f-1001-mock", "f-1002-mock"],

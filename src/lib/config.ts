@@ -23,14 +23,15 @@ export function createDefaultConfig({ docsPath, directorTool, reviewerTool, code
     audit_tools: SUPPORTED_AUDIT_TOOLS.map((id) => ({
       id,
       enabled: id === AUDIT_TOOLS.CODERABBIT ? coderabbitEnabled : false,
+      auto_implement: {
+        enabled: false,  // Conservative default: don't auto-implement
+        min_severity: "minor",  // Only auto-implement minor+ severity findings
+        only_refactor_suggestions: false,  // Apply all findings above min_severity
+      },
     })),
     context: {
       docs_path: docsPath,
       max_docs_bytes: DEFAULT_MAX_DOCS_BYTES,
-    },
-    runtime: {
-      deterministic: true,
-      max_retries: 3,
     },
   };
 }
@@ -51,6 +52,12 @@ export function validateConfig({ config, cwd }) {
     throw new Error(`Unsupported config schema version: ${config.schema_version}`);
   }
 
+  // Schema version 1 in this repository requires autoUpdate.
+  // Backward compatibility with pre-release config variants is not supported.
+  if (typeof config.autoUpdate !== "boolean") {
+    throw new Error("autoUpdate must be a boolean.");
+  }
+
   const directorTool = config?.agents?.director?.tool;
   if (!SUPPORTED_AGENT_TOOLS.includes(directorTool)) {
     throw new Error(`Unsupported director tool: ${directorTool}`);
@@ -65,10 +72,6 @@ export function validateConfig({ config, cwd }) {
     if (!SUPPORTED_AGENT_TOOLS.includes(reviewer.tool)) {
       throw new Error(`Unsupported reviewer tool: ${reviewer.tool}`);
     }
-  }
-
-  if (typeof config.autoUpdate !== "boolean") {
-    throw new Error("autoUpdate must be a boolean.");
   }
 
   if (typeof config?.context?.max_docs_bytes !== "number" || config.context.max_docs_bytes <= 0) {

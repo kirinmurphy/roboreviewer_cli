@@ -1,5 +1,6 @@
 import { REQUEST_TYPES } from "../../constants.ts";
 import { listChangedFiles } from "../../system/git.ts";
+import { trackTokenUsage } from "../track-token-usage.ts";
 
 export async function verifyReviewers({ reviewers, onProgress }) {
   emitProgress({
@@ -16,7 +17,7 @@ export async function verifyReviewers({ reviewers, onProgress }) {
   }
 }
 
-export async function runImplementation({ cwd, director, findings, docsText, baseRef }) {
+export async function runImplementation({ cwd, director, findings, baseRef, session }) {
   if (findings.length === 0) {
     return {
       filesTouched: [],
@@ -28,8 +29,18 @@ export async function runImplementation({ cwd, director, findings, docsText, bas
     type: REQUEST_TYPES.IMPLEMENT,
     cwd,
     findings,
-    docsText,
+    // docsText removed - findings are self-contained with context from review phase
   });
+
+  // Track token usage for implementation
+  if (session && result.usage) {
+    trackTokenUsage({
+      session,
+      phase: "implement",
+      usage: result.usage,
+    });
+  }
+
   const filesTouched = await listChangedFiles({ cwd, diffBase: baseRef });
   return {
     filesTouched: filesTouched.length > 0 ? filesTouched : result.files_touched ?? [],

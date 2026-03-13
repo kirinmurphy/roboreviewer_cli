@@ -1,4 +1,5 @@
 import { renderReviewEvent } from "../../lib/output/review-output/index.ts";
+import { formatStageLabel } from "../../lib/output/review-output/helper-functions.ts";
 
 export function createReviewWriter({ verbose }: { verbose: boolean }) {
   let transientAuditLineVisible = false;
@@ -52,9 +53,9 @@ function isAuditStartEvent({ event }: { event: unknown }) {
 }
 
 function writeTransientAuditLine({ event }: { event: any }) {
-  const text = `[roboreviewer] Audit: ${event.toolId} running...`;
+  const text = `${formatStageLabel()} Audit: ${event.toolId} running...`;
   if (!process.stdout.isTTY) {
-    process.stdout.write(`${text}\n`);
+    process.stdout.write(`[roboreviewer] Audit: ${event.toolId} running...\n`);
     return;
   }
 

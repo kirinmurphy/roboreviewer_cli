@@ -50,7 +50,7 @@ The controller manages state, routes findings between agents, and ensures determ
    ↓
 10. HITL Resolution Queue Finalization (aggregate unresolved items for human review)
    ↓
-11. Reporting (generate .roboreviewer/runtime/ROBOREVIEWER_SUMMARY.md)
+11. Reporting (persist .roboreviewer/runtime/session.json)
 ```
 
 ### 2.2 Execution Modes
@@ -60,11 +60,12 @@ The `roboreviewer review` command runs the full automated review loop without us
 
 - Runs to completion automatically
 - Suitable for automation, CI/CD, and scripts
-- Outputs `.roboreviewer/runtime/ROBOREVIEWER_SUMMARY.md` with results
+- Persists `.roboreviewer/runtime/session.json` with results
+- Displays token usage summary at completion (total tokens, per-phase breakdown, call counts)
 - Exits after consensus findings are implemented and unresolved conflicts are queued
 
 **Interactive (HITL):**
-The `roboreviewer resolve` command enters Human-in-the-Loop mode:
+The `roboreviewer resume` command enters Human-in-the-Loop mode:
 
 - User is prompted for each queued non-consensus conflict from a completed review run
 - Session state is saved between decisions
@@ -85,7 +86,7 @@ roboreviewer init
 
 This creates `.roboreviewer/config.json` with:
 
-1. Prompts for a repository-local `docs_path` (or leaves it empty if not needed)
+1. Prompts for an optional repository-local docs file or folder path (or leaves it empty if not needed)
 2. Prompts for a documentation-size limit
 3. Prompts for Director and optional second-reviewer agent choices
 4. Prompts for enabling supported built-in audit tools
@@ -176,18 +177,18 @@ The orchestrator should not duplicate this behavior unless an adapter cannot rel
 
 #### Documentation Injection
 
-If `context.docs_path` is configured, documentation is loaded from that path:
+If `context.docs_path` is configured, documentation is loaded from that file or folder path:
 
-1. Recursively read `.md` and `.txt` files from that path
+1. Read the selected `.md` or `.txt` file, or recursively read `.md` and `.txt` files from the selected folder
 2. Wrap content in `<documentation>` tags
 3. Exclude secret patterns from docs directory
 4. Use deterministic ordering (sorted paths)
 5. Measure the total selected file size before prompt assembly
 6. Fail fast with a clear error if the selected docs exceed `context.max_docs_bytes`
 
-If no docs path is configured, the review can still proceed without injected project documentation.
+If no docs file or folder path is configured, the review can still proceed without injected project documentation.
 
-The path can be overridden for a single run via `--docs <path>`, which replaces `context.docs_path` for that run but still uses `context.max_docs_bytes` as the size limit.
+The file or folder path can be overridden for a single run via `--docs <file-or-folder>`, which replaces `context.docs_path` for that run but still uses `context.max_docs_bytes` as the size limit.
 
 **Why wrap in tags?** Prevents agents from confusing requirements (in docs) with implementation instructions (in rules).
 
@@ -198,6 +199,63 @@ Before sending prompts to any agent:
 1. Detect and mask obvious secret tokens (API keys, passwords)
 2. Apply redaction to code snippets and tool output
 3. Record redaction event counts in session metadata (without storing the secrets themselves)
+
+#### Token Optimization Strategies
+
+The system implements multiple strategies to minimize LLM API token consumption while maintaining review quality:
+
+**1. Smart Documentation Filtering**
+
+Documentation is filtered by relevance before being sent to agents (see `src/lib/docs-filter.ts`):
+
+- File path matching (e.g., `src/lib/runtime/` matches docs mentioning "runtime")
+- File name matching (e.g., `session.ts` matches sections mentioning "session")
+- Term extraction and relevance scoring
+- Automatic truncation to `context.max_docs_bytes`
+
+This typically reduces documentation size by 30-60% while preserving relevant context.
+
+**2. Differential Context Transmission**
+
+Each workflow phase receives only the context it needs:
+
+- **Initial Review**: Full diff + filtered documentation (agents have read-only file access)
+- **Peer Review**: Findings only (no diff or docs) + read-only file access to verify specific findings
+- **Pushback Response**: Findings only + read-only file access
+- **Implementation**: Findings only + write access to implement fixes
+
+Agents only read files they need to verify/implement, rather than receiving the full diff upfront.
+
+This eliminates redundant transmission of large diffs and documentation across multiple agent invocations.
+
+**3. Optimized Data Transmission**
+
+- **Reduced git diff context**: Uses `--unified=1` instead of `--unified=3`
+- **Compacted audit findings**: Sends only essential fields (id, file, summary, severity)
+- **Compacted peer review findings**: Excludes internal tracking fields when transmitting between phases
+
+**4. CodeRabbit-First Workflow**
+
+When `auto_implement.enabled` is true for CodeRabbit in `audit_tools`:
+
+1. CodeRabbit static analysis runs first
+2. Eligible findings are auto-implemented before LLM review
+3. Changes are committed
+4. LLM agents review the updated code
+
+This eliminates the need for LLM agents to assess each audit finding, saving 30-50% of tokens.
+
+**5. Token Usage Tracking**
+
+All LLM interactions are tracked in the session state (see `token_usage` field in session schema):
+
+- Total input/output tokens and bytes
+- Per-phase breakdown (review, peer_review, implement, audit_auto_implement)
+- Call counts per phase
+
+Token estimation uses a 1 token ≈ 4 characters heuristic for accurate byte-to-token conversion.
+
+See [review_token_optimization.md](../review_token_optimization.md) for detailed implementation notes and [token-optimization-best-practices.md](../token-optimization-best-practices.md) for general principles.
 
 #### Configuration: `.roboreviewer/config.json`
 
@@ -294,7 +352,7 @@ Each code issue discovered by a reviewer is represented as a finding:
 
 ### 3.5 HITL (Human-in-the-Loop) Resolver
 
-When the consensus engine produces non-consensus items, they are added to a deferred resolution queue. The human resolves that queue after the review loop has completed, or later via `roboreviewer resolve`.
+When the consensus engine produces non-consensus items, they are added to a deferred resolution queue. The human resolves that queue after the review loop has completed, or later via `roboreviewer resume`.
 
 #### Interactive UI
 
@@ -463,6 +521,42 @@ This file is the source of truth for the current roboreviewer session.
     "phase": "hitl_resolution|final_implementation",
     "next_conflict_index": 0
   },
+  "token_usage": {
+    "total_input_tokens": 55000,
+    "total_output_tokens": 3500,
+    "total_input_bytes": 220000,
+    "total_output_bytes": 14000,
+    "by_phase": {
+      "review": {
+        "input_tokens": 50000,
+        "output_tokens": 2500,
+        "input_bytes": 200000,
+        "output_bytes": 10000,
+        "call_count": 2
+      },
+      "peer_review": {
+        "input_tokens": 2500,
+        "output_tokens": 500,
+        "input_bytes": 10000,
+        "output_bytes": 2000,
+        "call_count": 2
+      },
+      "implement": {
+        "input_tokens": 1250,
+        "output_tokens": 400,
+        "input_bytes": 5000,
+        "output_bytes": 1600,
+        "call_count": 1
+      },
+      "audit_auto_implement": {
+        "input_tokens": 1250,
+        "output_tokens": 100,
+        "input_bytes": 5000,
+        "output_bytes": 400,
+        "call_count": 1
+      }
+    }
+  },
   "updated_at": "2026-03-08T19:10:12Z"
 }
 ```
@@ -470,42 +564,6 @@ This file is the source of truth for the current roboreviewer session.
 **Why `schema_version`?** Allows future migrations if state format changes.
 
 **Atomic writes:** Always write to `.roboreviewer/runtime/session.tmp.json` then rename to prevent corruption on crash.
-
----
-
-### 4.2 Reporting: `.roboreviewer/runtime/ROBOREVIEWER_SUMMARY.md`
-
-Generated after each iteration, this is the human-readable report.
-
-**Required sections:**
-
-```markdown
-# Debate Summary
-
-## ⚠️ Unresolved Conflicts
-
-1. **Auth.ts:42** - Reviewer wants Reducer pattern, Director says overkill
-   - Reviewer (Codex): "State management should scale"
-   - Director (Claude): "Only 2 variables, YAGNI principle"
-   - Status: **Awaiting human decision**
-
-## ✅ Consensus Fixes
-
-1. **api.ts:15** - Added rate limiting (Reviewer-1, agreed by Director)
-2. **db.ts:88** - Fixed SQL injection vulnerability (Reviewer-2, agreed by all)
-
-## 📋 Review Log
-
-- Built-in audit tools identified 12 baseline issues
-- Reviewers identified 8 issues
-- 15 findings after deduplication
-- 13 resolved via consensus
-- 2 escalated to human
-
-## 📊 Session Stats
-
-- Duration: 4m 32s
-```
 
 ---
 
@@ -529,7 +587,7 @@ Errors are classified as **retryable** or **terminal**:
 ### 5.2 Retry Policy
 
 ```javascript
-max_retries = 3 (from config)
+max_retries = 3
 backoff = [1s, 2s, 4s]
 
 for attempt in 1..max_retries:
@@ -551,7 +609,7 @@ for attempt in 1..max_retries:
 3. **Rule precedence tests** - Correct rules applied for Claude vs Codex Director
 4. **Adapter capability/fallback tests** - Handles missing tools gracefully
 5. **Clean-working-tree enforcement tests** - `roboreviewer review` refuses to run when the working tree is not clean
-6. **Crash/restart persistence tests** - State is valid after interruption during `resolve`
+6. **Crash/restart persistence tests** - State is valid after interruption during `resume`
 
 ### 6.2 Consensus Engine Tests
 
@@ -567,7 +625,7 @@ for attempt in 1..max_retries:
 1. **Interactive decision persistence** - Decisions survive restart
 2. **Resume cursor correctness** - `roboreviewer resume` picks up at right conflict
 3. **Final-turn idempotency** - Running final turn twice produces same result
-4. **Summary/state consistency** - `.roboreviewer/runtime/session.json` and `.roboreviewer/runtime/ROBOREVIEWER_SUMMARY.md` always agree
+4. **State consistency** - `.roboreviewer/runtime/session.json` always remains valid and resumable
 
 ---
 

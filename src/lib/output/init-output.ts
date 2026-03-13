@@ -64,6 +64,16 @@ export function renderInitConfirmation({
       text: "-".repeat(INTERNAL_CONFIG.cli.sectionDividerWidth),
       tone: "gray",
     }),
+    `${colorize({ text: INTERNAL_CONFIG.cli.init.nextStepsTitle, tone: "cyan", bold: true })}`,
+    ...INTERNAL_CONFIG.cli.init.nextSteps.map(
+      (step) =>
+        `${colorize({ text: step.command, tone: "green", bold: true })} - ${step.description}`,
+    ),
+    colorize({
+      text: "-".repeat(INTERNAL_CONFIG.cli.sectionDividerWidth),
+      tone: "gray",
+    }),
+    "",
   ];
 
   if (installedTools.length > 0) {

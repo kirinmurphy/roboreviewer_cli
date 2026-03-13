@@ -27,7 +27,7 @@ export function renderPeerReview({ reviewer, comments, findings, verbose }: { re
   const sourceReviewers = summarizeSourceReviewers({ comments, findings });
   const lines = [
     renderSectionHeader({
-      title: `${INTERNAL_CONFIG.cli.review.peerReviewTitle}: ${reviewer.tool} reviewing ${sourceReviewers}`,
+      title: `${INTERNAL_CONFIG.cli.review.peerReviewTitle}: ${reviewer.tool} reviewing ${sourceReviewers}'s findings`,
       tone: "blue",
     }),
   ];
@@ -157,7 +157,7 @@ export function renderNonConsensusAfterCompletion({ session }: { session: any })
   for (const finding of nonConsensus) {
     lines.push(renderCompactFindingDetail({ finding, tone: "red", includeRecommendation: true }));
   }
-  lines.push(`Use command \`roboreviewer resolve\` to decide how to resolve the above non-consensus item(s).`);
+  lines.push(`Use command \`roboreviewer resume\` to decide how to resolve the above non-consensus item(s).`);
   lines.push("");
   return lines.join("\n");
 }

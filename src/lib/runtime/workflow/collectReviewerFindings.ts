@@ -2,6 +2,10 @@ import { FINDING_STATUSES, REQUEST_TYPES } from "../../constants.ts";
 import { findingId } from "../../ids.ts";
 import { createFindingSignature, filterNewFindings } from "../workflow-state/index.ts";
 import { emitProgress } from "./helper-functions.ts";
+import { trackTokenUsage } from "../track-token-usage.ts";
+import { filterAuditFindings, getDefaultAuditFilter, deduplicateAuditFindings } from "./filterAuditFindings.ts";
+import { listReviewScopeFiles } from "../../system/git.ts";
+import { detectDuplicateFindings, getDuplicateStats } from "./detectDuplicateFindings.ts";
 
 export async function collectReviewerFindings({
   cwd,
@@ -12,13 +16,45 @@ export async function collectReviewerFindings({
   commitMessages,
   existingFindings,
   scanIteration,
+  session,
   onProgress,
+  diffBase,
 }) {
   const allFindings = [];
   const reviewerResults = [];
   const auditAssessments = [];
   const auditFindings = auditRuns.flatMap((run) => run.findings ?? []);
   const auditText = auditRuns.map((run) => `${run.id}: ${run.advisory ?? run.error ?? ""}`).join("\n\n");
+
+  // Deduplicate audit findings across tools (e.g., CodeRabbit + ESLint flagging same issue)
+  const { deduplicated: dedupedAuditFindings, stats: dedupStats } = deduplicateAuditFindings(auditFindings);
+
+  if (dedupStats.duplicates > 0) {
+    emitProgress({
+      onProgress,
+      message: `Deduplicated audit findings: ${dedupStats.unique}/${dedupStats.total} (merged ${dedupStats.duplicates} duplicate(s) across tools)`,
+    });
+  }
+
+  // Pre-filter audit findings to reduce token usage
+  const changedFiles = await listReviewScopeFiles({ cwd, diffBase, includeWorktree: false });
+  const filterConfig = getDefaultAuditFilter({
+    reviewerCount: reviewers.length,
+    changedFilesCount: changedFiles.length,
+  });
+  const { filtered: filteredAuditFindings, stats: filterStats } = filterAuditFindings({
+    auditFindings: dedupedAuditFindings,
+    changedFiles,
+    diffText,
+    filter: filterConfig,
+  });
+
+  if (filterStats.total > 0) {
+    emitProgress({
+      onProgress,
+      message: `Filtered audit findings: ${filterStats.kept}/${filterStats.total} (removed ${filterStats.removedBelowSeverity} below severity, ${filterStats.removedNotInChangedFiles} not in changed files, ${filterStats.removedAlreadyFixed} already fixed)`,
+    });
+  }
 
   for (const reviewer of reviewers) {
     emitProgress({
@@ -36,7 +72,7 @@ export async function collectReviewerFindings({
         diffText,
         docsText,
         auditText,
-        auditFindings,
+        auditFindings: filteredAuditFindings,  // Use filtered findings
         commitMessages,
       });
 
@@ -45,6 +81,15 @@ export async function collectReviewerFindings({
   );
 
   for (const { reviewer, result } of reviewResponses) {
+    // Track token usage
+    if (session && result.usage) {
+      trackTokenUsage({
+        session,
+        phase: "review",
+        usage: result.usage,
+      });
+    }
+
     const findings = result.findings.map((finding, index) => ({
       ...finding,
       finding_id: `${reviewer.reviewer_id}-raw-${index + 1}`,
@@ -84,7 +129,21 @@ export async function collectReviewerFindings({
       reviewerTool: finding.source_reviewer_tool ?? finding.source_reviewer_id,
     }),
   }));
-  const findingsBySignature = new Map(newFindings.map((finding) => [createFindingSignature(finding), finding]));
+
+  // Detect potential duplicates to help reduce peer review load
+  const findingsWithDuplicateDetection = detectDuplicateFindings(newFindings);
+  const duplicateStats = getDuplicateStats(findingsWithDuplicateDetection);
+
+  if (duplicateStats.potentialDuplicates > 0) {
+    emitProgress({
+      onProgress,
+      message: `Detected ${duplicateStats.potentialDuplicates} potential duplicate finding(s) for review`,
+    });
+  }
+
+  const findingsBySignature = new Map(
+    findingsWithDuplicateDetection.map((finding) => [createFindingSignature(finding), finding])
+  );
 
   for (const reviewerResult of reviewerResults) {
     emitProgress({
@@ -102,7 +161,7 @@ export async function collectReviewerFindings({
 
   return {
     reviewerResults,
-    findings: newFindings,
+    findings: findingsWithDuplicateDetection,
     auditAssessments,
     rawFindingCount: allFindings.length,
   };
