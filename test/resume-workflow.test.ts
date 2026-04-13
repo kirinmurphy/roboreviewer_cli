@@ -44,6 +44,7 @@ test("resume continues a paused manual consensus approval workflow", async () =>
       scanIteration: 1,
       includeWorktree: false,
       docsPath: config.context.docs_path,
+      diffBase: reviewTarget.diffBase,
       onApproveImplementationReady: async () => {
         await collectConsensusApprovalDecisions({
           cwd: tempDir,

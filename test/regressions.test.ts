@@ -45,6 +45,8 @@ test("collectReviewerFindings tolerates missing summary and recommendation text"
     commitMessages: [],
     existingFindings: [],
     scanIteration: 1,
+    session: null,
+    diffBase: "HEAD",
     onProgress: (event) => {
       progressEvents.push(event);
     },
@@ -107,6 +109,8 @@ test("collectReviewerFindings runs independent reviewer requests concurrently", 
     commitMessages: [],
     existingFindings: [],
     scanIteration: 1,
+    session: null,
+    diffBase: "HEAD",
     onProgress: () => {},
   });
 
@@ -170,7 +174,7 @@ test("runPeerReview rejects incomplete peer review coverage", async () => {
           peer_reviews: [],
         },
       ],
-      diffText: "",
+      session: null,
       onProgress: () => {},
     }),
     /codex returned 0 peer review comment\(s\) for 1 finding\(s\)\./,

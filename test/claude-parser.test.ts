@@ -31,6 +31,6 @@ test("sanitizeClaudeErrorMessage strips prompt dumps and keeps the actionable Cl
 test("createReviewResponse rejects malformed structured review payloads", () => {
   assert.throws(
     () => createReviewResponse({ findings: [] }),
-    /missing required array field: audit_assessments/i,
+    /missing required array field: comments/i,
   );
 });

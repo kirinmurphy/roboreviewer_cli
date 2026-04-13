@@ -36,6 +36,7 @@ test("repeat scan appends iterations and ignores previously tracked findings", a
     scanIteration: 1,
     includeWorktree: false,
     docsPath: config.context.docs_path,
+    diffBase: reviewTarget.diffBase,
     onApproveImplementationReady: async ({ findings }) =>
       new Map(findings.filter((finding) => finding.summary.includes("debugger")).map((finding) => [finding.finding_id, false])),
     onResolveConflicts: async ({ conflicts }) => {
@@ -61,6 +62,7 @@ test("repeat scan appends iterations and ignores previously tracked findings", a
     scanIteration: 2,
     includeWorktree: true,
     docsPath: config.context.docs_path,
+    diffBase: reviewTarget.diffBase,
     onApproveImplementationReady: async () => new Map(),
     onResolveConflicts: async ({ conflicts }) => {
       for (const conflict of conflicts) {
