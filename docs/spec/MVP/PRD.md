@@ -286,7 +286,7 @@ roboreviewer init
 1. When supported tools are missing, it may offer immediate install help.
 1. Tool installation and tool authentication are separate; init should remind users that Codex, Claude, and CodeRabbit may still require manual local authentication/setup after installation.
 1. Re-running `roboreviewer init` must ask for confirmation before replacing an existing `.roboreviewer/config.json`.
-1. Automatically add `.roboreviewer/` to `.gitignore`, with an option to do it automatically.
+1. Automatically add `.roboreviewer/` to `.gitignore`.
 1. After a successful run, print a readiness block that points users to `.roboreviewer/config.json` and, when setup installed third-party tools, shows commands to verify and launch them.
 
 Before `roboreviewer review` or `roboreviewer resume` begins work, the system will validate that the config satisfies the minimum schema and runtime requirements. Validation in v1 is technical only, such as config shape, git state, path existence, and byte limits. It will not attempt to validate whether documentation fully captures project-specific business rules.
@@ -354,23 +354,23 @@ Roboreviewer implements comprehensive token optimization to minimize LLM API cos
 
 Each workflow phase receives only the context it needs:
 
-- **Initial Review**: Full diff + filtered documentation
+- **Initial Review**: Full diff + loaded documentation context
 - **Peer Review**: Findings only (no diff or docs) + read-only file access to verify findings
 - **Pushback Response**: Findings only + read-only file access
 - **Implementation**: Findings only (no documentation - findings are self-contained) + write access
 
 This eliminates redundant transmission of large diffs and documentation across multiple agent invocations.
 
-### 10.2. Smart Documentation Filtering
+### 10.2. Documentation Context Control
 
-Documentation is filtered by relevance to changed files before sending to LLM agents:
+Documentation loading is deterministic and byte-limited before sending context to LLM agents:
 
-- File path matching (e.g., `src/lib/runtime/` matches documentation about runtime system)
-- File name matching (e.g., `session.ts` matches sections mentioning "session")
-- Term extraction and relevance scoring
-- Automatic truncation to configured byte limits
+- Supported files are `.md` and `.txt`
+- Selected files are read in deterministic path order
+- The active review path fails fast when selected documentation exceeds `context.max_docs_bytes`
+- Relevance-scoring helpers exist for targeted documentation filtering, but the current build does not silently truncate over-limit documentation to fit
 
-This typically reduces documentation size by 30-60% while preserving relevant context.
+This keeps documentation payload behavior explicit and predictable.
 
 ### 10.3. CodeRabbit-First Workflow
 
@@ -378,10 +378,10 @@ When `auto_implement` is enabled for CodeRabbit, the system:
 
 1. Runs CodeRabbit static analysis
 2. Auto-implements eligible findings before LLM review
-3. Commits the changes
-4. Runs LLM agents on the updated code
+3. Applies approved audit fixes directly to the working tree
+4. Runs LLM agents on the updated working tree diff
 
-This eliminates the need for LLM agents to assess each audit finding, saving 30-50% of tokens while ensuring static analysis issues are addressed.
+This reduces the need for LLM agents to assess audit findings that have already been accepted for implementation.
 
 Configuration example:
 
@@ -472,7 +472,7 @@ In this repository build:
 
 ## 12. Future Extensions
 
-See [deferred-scope.md](/Users/kirinmurphy/projects/prototypin/roboreviewer/docs/spec/future_phase/deferred-scope.md) for deferred capabilities beyond the first iteration.
+See [deferred-scope.md](../future_phase/deferred-scope.md) for deferred capabilities beyond the first iteration.
 
 ---
 
@@ -535,18 +535,14 @@ sequenceDiagram
     O->>R: Return pushback on R-sourced findings
     D-->>O: Final stance on D findings
     R-->>O: Final stance on R findings
-    O->>D: Implement consensus fixes
-    D-->>O: Code changes
-    O-->>U: Write summary and queue non-consensus items
-
-    opt Non-consensus items exist
-        U->>O: roboreviewer resume
-        O-->>U: Present queued conflicts one by one
-        U->>O: Implement or discard each disputed recommendation
-        O->>D: Final director-only implementation turn
-        D-->>O: Final code changes
-        O-->>U: Updated summary and completed session
+    opt Consensus approvals required or non-consensus items exist
+        O-->>U: Present approvals and conflicts one by one
+        U->>O: Approve, implement, or discard each recommendation
     end
+
+    O->>D: Implement accepted findings
+    D-->>O: Code changes
+    O-->>U: Write summary and prompt for repeat scan or end
 
     opt Any step is interrupted
         U->>O: roboreviewer resume

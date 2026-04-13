@@ -167,7 +167,7 @@ Step 1: Run CodeRabbit (static analysis)
   ↓ Finds 30 style/formatting issues
 
 Step 2: Auto-implement eligible fixes
-  ↓ Fixes 25 style issues, commits them
+  ↓ Fixes 25 style issues in the working tree
 
 Step 3: LLM reviews the cleaned-up code
   ↓ Focuses on logic/design, not formatting

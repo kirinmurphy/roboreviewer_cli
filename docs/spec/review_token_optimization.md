@@ -1,16 +1,16 @@
 # Token Optimization Implementation Summary
 
-This document summarizes the comprehensive token optimization changes implemented to reduce roboreviewer's token consumption by 75-90%.
+This document summarizes the token optimization changes implemented in the current Roboreviewer build.
 
 ## Overview
 
-All recommended optimizations have been implemented across four phases:
+Implemented optimizations span four areas:
 - **Phase 1**: Quick wins (25-35% reduction)
 - **Phase 2**: CodeRabbit-first workflow (30-50% reduction)
 - **Phase 3**: Advanced optimizations (10-20% additional reduction)
-- **Phase 4**: Advanced intelligence (15-30% additional reduction)
+- **Phase 4**: Advanced intelligence primitives; large-PR routing exists as a helper but is not wired into the review workflow
 
-**Total estimated savings: 75-90% token reduction**
+**Estimated savings:** depends on repository shape and enabled tools. The current flow has measured/estimated savings from reduced diff context, finding-only peer phases, audit filtering, explicit documentation byte limits, and optional audit auto-implementation. Large-PR two-pass routing, active targeted docs filtering, and prompt caching remain future work.
 
 ---
 
@@ -113,24 +113,24 @@ All recommended optimizations have been implemented across four phases:
 
 ## Phase 3: Advanced Optimizations (Completed)
 
-### 10. Created smart documentation filtering
+### 10. Added documentation relevance-scoring support
 **Files Created:**
 - `src/lib/docs-filter.ts`
 
-**Impact:** Filters documentation to only include sections relevant to changed files using:
+**Impact:** Provides helper logic that can filter documentation to sections relevant to changed files using:
 - File path matching
 - File name matching
 - Term extraction and relevance scoring
-- Automatic truncation to byte limits
+- Fail-fast enforcement of configured documentation byte limits
 
-**Savings:** ~30-60% of documentation size (varies by doc structure)
+**Current workflow note:** the active review path still enforces `context.max_docs_bytes` by failing fast instead of silently truncating over-limit docs. Targeted filtering is available as implementation support, not as a guarantee that over-limit docs will be reduced automatically.
 
 ### 11. Integrated smart doc filtering into context loading
 **Files Modified:**
 - `src/lib/docs.ts` (added `loadFilteredDocumentationContext`)
 - `src/commands/review/helper-functions.ts`
 
-**Impact:** Documentation is now filtered based on changed files before sending to LLMs.
+**Impact:** Review context loading calls the filtered-docs entry point, while preserving fail-fast byte-limit semantics for selected docs.
 
 ### 12. Added comprehensive token usage tracking
 **Files Created:**
@@ -387,19 +387,19 @@ See [Optional Improvements](#optional-improvements) section below for detailed a
 
 ## Summary
 
-All token optimization recommendations have been successfully implemented, resulting in an estimated **75-90% reduction in token consumption** while maintaining review quality. The system now:
+The current workflow implements the following token controls while keeping higher-risk routing ideas out of the default path:
 
-✅ Sends minimal context to peer reviewers (diff removed from peer review)
-✅ Auto-implements audit findings (optional, with approval workflow)
-✅ Filters documentation by relevance and changed symbols (symbol-aware)
-✅ Pre-filters audit findings before LLM review
-✅ Deduplicates audit findings across tools (CodeRabbit + ESLint merging)
-✅ Detects potential duplicate LLM findings
-✅ Tracks detailed token usage by phase
-✅ Uses compact diff context (unified=1 instead of unified=3)
-✅ Transmits only essential finding data
-✅ Displays token usage in CLI output
-✅ Categorizes files in large PRs for intelligent routing
+- Sends minimal context to peer reviewers by removing the diff from peer-review and pushback requests
+- Auto-implements eligible audit findings when `auto_implement.enabled` is configured, with approval prompts when `autoUpdate` is `false`
+- Enforces explicit documentation byte limits and includes relevance-scoring support for targeted filtering
+- Pre-filters audit findings before LLM review
+- Deduplicates audit findings across tools
+- Detects potential duplicate LLM findings
+- Tracks detailed token usage by phase
+- Uses compact diff context with `--unified=1`
+- Transmits only essential finding data between phases
+- Displays token usage in CLI output
+- Provides large-PR categorization helpers for future routing, but does not use them in the active review workflow
 
 ### New Files Created
 - `src/lib/docs-filter.ts` - Smart documentation filtering

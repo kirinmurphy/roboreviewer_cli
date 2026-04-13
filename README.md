@@ -1,20 +1,20 @@
 # roboreviewer
 
-`roboreviewer` is an automated code reviewer CLI that marshals numerous other CLI tools into one coordinated workflow for AI assisted reviews.
+`roboreviewer` is an automated code reviewer CLI that marshals multiple CLI tools into one coordinated workflow for AI-assisted reviews.
 
-Instead of manually interacting with several different AI tools for verifying code quality, `roboreviewer` captures, cross-references, validates and implements feedback across numerous tools.
+Instead of manually interacting with several different AI tools for verifying code quality, `roboreviewer` captures, cross-references, validates, and implements feedback across configured tools.
 
 ## How it works
 
 `roboreviewer`:
 
-- Collects findings from static audit tools like CodeRabbit
-- Feeds commits, audit tool findings and README docs to >=1 CLI coding agents for analysis
-- Applies a peer-review consensus mechanism to agent findings to reinfoce feedback confidence.
-- Provides the option to have recommendations updated automatically or after user approval.
-- Requires user to tie-break findings that did not reach consensus across agents.
-- Employs primary "Director" agent to automatically update code based on consensus and user feedback.
-- Allows repeat smart scans to prevent issues from falling through the cracks.
+- Collects advisory findings from static audit tools like CodeRabbit when enabled
+- Feeds the review diff, configured project docs, commit metadata, and filtered audit context to one or two CLI coding agents
+- Applies a peer-review consensus mechanism when a second reviewer is configured
+- Lets consensus recommendations be implemented automatically, or prompts for per-finding approval when manual approval mode is selected
+- Prompts the user to resolve findings that do not reach consensus
+- Uses the primary "Director" agent to update the working tree based on accepted findings
+- Allows repeat smart scans that include the original review scope plus current workspace changes
 
 ---
 
@@ -105,6 +105,8 @@ Follow [these instructions](docs/setup-instructions.md) to set up `roboreviewer`
 | `roboreviewer review <commit-ish>` | Review a commit range from the included commit hash to the most recent commit. |
 | `roboreviewer resume`              | Resume any paused review session from saved state.                             |
 
+`roboreviewer review` requires a clean working tree at startup. Repeat scans prompted at the end of an iteration may include current unstaged and untracked workspace changes. `roboreviewer resume` continues from a saved cursor if the process was interrupted during manual consensus approval, conflict resolution, or final implementation.
+
 ## Available CLI Tools
 
 Supported agent adapters in this build:
@@ -117,7 +119,7 @@ Supported built-in audit tool:
 
 - `coderabbit`
 
-Any tools not already installed will be installed automatically if enabled during `roboreview init`.
+When a selected tool is missing, `roboreviewer init` offers configured install help where available. Tool authentication remains a separate local setup step.
 
 ## `roboreviewer init`
 
@@ -159,17 +161,23 @@ and produces `.roboreviewer/config.json`
 }
 ```
 
-Running `roboreview init` a second time requires confirmation to overwrite file with new configuration.
+Running `roboreviewer init` a second time requires confirmation to overwrite the existing configuration. The init helper also adds `.roboreviewer/` to `.gitignore`, so both config and runtime state are local by default in this build.
 
 ## `roboreviewer review`
 
-Running `roboreviewer` triggers a review workflow
+Running `roboreviewer review <commit-ish>` or `roboreviewer review --last` starts a review workflow:
 
-[EXAMPLE REVIEW CLI SCREENSHOTS PLACEHOLDER - coming soon]
+- resolve the commit range and build a reduced-context unified diff
+- load configured `.md` or `.txt` documentation within the configured byte limit
+- run enabled audit tools on the first scan only
+- collect reviewer findings, peer-review them when a second reviewer is configured, and persist session state
+- optionally prompt for consensus approvals when `autoUpdate` is `false`
+- prompt for disputed finding decisions when needed
+- ask whether to repeat the scan or end the session
 
-and produces `.roboreviewer/runtime/session.json`
+The workflow writes `.roboreviewer/runtime/session.json` and session history under `.roboreviewer/runtime/history/`.
 
-[EXAMPLE REVIEW session.json PLACEHOLDER - coming soon]
+If a run is interrupted while a cursor is active, run `roboreviewer resume` to continue from saved state.
 
 ## License
 

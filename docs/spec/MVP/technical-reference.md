@@ -46,31 +46,31 @@ The controller manages state, routes findings between agents, and ensures determ
    ↓
 8. Determine implementation-ready findings and unresolved conflicts
    ↓
-9. Implementation Phase (Director applies accepted findings)
+9. Manual approvals and HITL conflict resolution when required
    ↓
-10. HITL Resolution Queue Finalization (aggregate unresolved items for human review)
+10. Implementation Phase (Director applies accepted findings)
    ↓
 11. Reporting (persist .roboreviewer/runtime/session.json)
 ```
 
 ### 2.2 Execution Modes
 
-**Non-Interactive (Default):**
-The `roboreviewer review` command runs the full automated review loop without user interaction:
+**Review Command:**
+The `roboreviewer review` command runs the active review loop and prompts inline when configured behavior requires user input:
 
-- Runs to completion automatically
-- Suitable for automation, CI/CD, and scripts
-- Persists `.roboreviewer/runtime/session.json` with results
-- Displays token usage summary at completion (total tokens, per-phase breakdown, call counts)
-- Exits after consensus findings are implemented and unresolved conflicts are queued
+- Requires a clean working tree before the first iteration starts
+- Persists `.roboreviewer/runtime/session.json` and history snapshots as the runtime source of truth
+- Prompts for per-finding consensus approval when `autoUpdate` is `false`
+- Prompts for non-consensus conflict decisions during the same review run when conflicts exist
+- Prompts after each iteration to repeat the scan or end the session
+- Displays token usage summary at completion when usage data is available
 
-**Interactive (HITL):**
-The `roboreviewer resume` command enters Human-in-the-Loop mode:
+**Resume Command:**
+The `roboreviewer resume` command continues from a saved cursor:
 
-- User is prompted for each queued non-consensus conflict from a completed review run
-- Session state is saved between decisions
-- Can exit and `roboreviewer resume` later, including after decisions are recorded but before the final Director implementation turn completes
-- Provides context (reviewer's critique, director's pushback, relevant rules/docs)
+- Continues manual consensus approval, HITL conflict resolution, or final implementation when the prior process was interrupted
+- Saves session state between decisions
+- Reruns the pending final Director implementation step when the cursor is already in `final_implementation`
 
 ## 3. Key Subsystems
 
@@ -90,9 +90,9 @@ This creates `.roboreviewer/config.json` with:
 2. Prompts for a documentation-size limit
 3. Prompts for Director and optional second-reviewer agent choices
 4. Prompts for enabling supported built-in audit tools
-5. Prompts the user to add `.roboreviewer/runtime/` to `.gitignore` or does it automatically if approved
+5. Adds `.roboreviewer/` to `.gitignore`
 
-**One-time setup per repository.** The config file should be committed so the whole team shares the same settings.
+**One-time setup per repository.** In this repository build, `.roboreviewer/` is local by default, so both config and runtime files are ignored unless a team deliberately chooses a different repository policy.
 
 #### Pre-flight Checks ("The Doctor")
 
@@ -204,22 +204,23 @@ Before sending prompts to any agent:
 
 The system implements multiple strategies to minimize LLM API token consumption while maintaining review quality:
 
-**1. Smart Documentation Filtering**
+**1. Documentation Context Control**
 
-Documentation is filtered by relevance before being sent to agents (see `src/lib/docs-filter.ts`):
+Documentation is loaded deterministically before being sent to agents:
 
-- File path matching (e.g., `src/lib/runtime/` matches docs mentioning "runtime")
-- File name matching (e.g., `session.ts` matches sections mentioning "session")
-- Term extraction and relevance scoring
-- Automatic truncation to `context.max_docs_bytes`
+- Supported files are `.md` and `.txt`
+- File and folder inputs are read in deterministic path order
+- Secret-like terms are redacted before prompt assembly
+- The selected documentation payload must fit within `context.max_docs_bytes`; over-limit documentation fails fast instead of being silently truncated
+- `src/lib/docs-filter.ts` contains relevance-scoring support, but the active review path does not rely on silent truncation to fit over-limit documentation
 
-This typically reduces documentation size by 30-60% while preserving relevant context.
+This makes docs context predictable while keeping room for future targeted filtering.
 
 **2. Differential Context Transmission**
 
 Each workflow phase receives only the context it needs:
 
-- **Initial Review**: Full diff + filtered documentation (agents have read-only file access)
+- **Initial Review**: Full diff + loaded documentation context (agents have read-only file access)
 - **Peer Review**: Findings only (no diff or docs) + read-only file access to verify specific findings
 - **Pushback Response**: Findings only + read-only file access
 - **Implementation**: Findings only + write access to implement fixes
@@ -240,10 +241,10 @@ When `auto_implement.enabled` is true for CodeRabbit in `audit_tools`:
 
 1. CodeRabbit static analysis runs first
 2. Eligible findings are auto-implemented before LLM review
-3. Changes are committed
-4. LLM agents review the updated code
+3. The Director applies approved audit fixes directly to the working tree
+4. LLM agents review the updated working tree diff
 
-This eliminates the need for LLM agents to assess each audit finding, saving 30-50% of tokens.
+This reduces the need for LLM agents to assess audit findings that have already been accepted for implementation.
 
 **5. Token Usage Tracking**
 
@@ -259,7 +260,7 @@ See [review_token_optimization.md](../review_token_optimization.md) for detailed
 
 #### Configuration: `.roboreviewer/config.json`
 
-This file lives in each repository (not in the CLI tool). It should be committed to version control so the entire team uses the same settings.
+This file lives in each repository (not in the CLI tool). The current init flow adds `.roboreviewer/` to `.gitignore`, so the default repository policy is local configuration plus local runtime state. Teams that want shared configuration can opt into a different policy outside the default flow.
 
 For the first iteration, audit-tool configuration is limited to built-in preset integrations. Custom audit commands and custom contracts are deferred.
 Built-in audit tools are configured under `audit_tools`, which allows zero or more enabled preset auditors such as `coderabbit`.
@@ -336,11 +337,10 @@ Each code issue discovered by a reviewer is represented as a finding:
 
 **6. Deduplication:**
 
-- If both reviewers identify the same issue, the peer review stage may label the findings as duplicates and request consolidation
-- Consolidation produces a single merged finding tracked by one canonical `finding_id`
-- The merged finding retains attribution for both contributing reviewers and preserves both original recommendation texts as supporting context when they differ
-- After consolidation, peer review and HITL operate on the merged finding rather than on the original duplicate entries
-- For v1, the orchestrator does not attempt semantic deduplication before peer review; duplicate detection is driven by reviewer labeling during the peer review phase
+- Before peer review, the orchestrator performs deterministic exact-match deduplication using normalized file, line, summary, and recommendation signatures
+- Exact-match deduplication produces one canonical finding with `merged_from` and `attribution` metadata
+- The workflow also annotates potential semantic duplicates with `potential_duplicate_of` and `similarity_score` so reviewers and reports can see likely overlap
+- Potential duplicate annotations do not automatically merge findings or change resolution status
 
 #### Why This Works
 
@@ -352,7 +352,7 @@ Each code issue discovered by a reviewer is represented as a finding:
 
 ### 3.5 HITL (Human-in-the-Loop) Resolver
 
-When the consensus engine produces non-consensus items, they are added to a deferred resolution queue. The human resolves that queue after the review loop has completed, or later via `roboreviewer resume`.
+When the consensus engine produces non-consensus items, they are added to a resolution queue. During a normal `roboreviewer review` run, the human resolves that queue inline before the final Director implementation turn. If the process is interrupted while the cursor is paused, `roboreviewer resume` continues from saved state.
 
 #### Interactive UI
 
@@ -389,15 +389,15 @@ State is saved in `.roboreviewer/runtime/session.json` with cursor tracking:
 }
 ```
 
-If the user exits during HITL, running `roboreviewer resume` picks up exactly where they left off.
+If the user exits during manual consensus approval or HITL resolution, running `roboreviewer resume` picks up exactly where they left off.
 
-For the first iteration, `roboreviewer resume` is only required to continue an interrupted HITL resolution flow, including the final Director implementation turn after decisions are recorded.
+For the first iteration, `roboreviewer resume` is required only for interrupted cursor-based workflows, including manual consensus approval, HITL resolution, and the final Director implementation turn after decisions are recorded.
 
 Resume in the HITL flow is phase-boundary based:
 
-1. Persist state atomically after each HITL decision
+1. Persist state atomically after each manual approval or HITL decision
 2. Once all decisions are collected, persist a `final_implementation` cursor before invoking the Director
-3. On resume, continue from the next unresolved conflict or rerun the pending final implementation step, depending on the stored cursor phase
+3. On resume, continue from the next pending approval, next unresolved conflict, or rerun the pending final implementation step, depending on the stored cursor phase
 
 ---
 
